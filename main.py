@@ -8,7 +8,8 @@ from model.variational_encoder import VariationalEncoder
 from util.im_utils import preprocess_observation_
 from pathlib import Path
 
-EPISODE_PATH = Path.cwd() / Path("data/episode.npy")
+EPISODE_PATH = Path.cwd() / "data" / "episode.npy"
+EPISODE_PATH.parent.mkdir(exist_ok=True)
 
 
 @dataclass
@@ -31,7 +32,7 @@ def get_data(args: Args = None, recreate: bool = False) -> np.ndarray:
     if recreate and args is None:
         raise ValueError("Cannot recreate episode without args")
     path = EPISODE_PATH
-    if path.exists():
+    if path.exists() and not recreate:
         return load_data_from_disk()
     elif args is not None:
         return gen_data(args)
@@ -82,9 +83,10 @@ def gen_data(args: Args) -> np.ndarray:
 def test(episode: np.ndarray) -> None:
     enc = VariationalEncoder()
     episode = torch.from_numpy(episode)
-    episode = preprocess_observation_(episode)
-    print(episode)
-    z = enc.forward(episode)
+    for frame in episode:
+        frame = preprocess_observation_(frame)
+        z = enc.forward(frame)
+    print(frame)
     print(f"latent z dims: {z.size()}")
 
 
