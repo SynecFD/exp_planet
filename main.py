@@ -81,13 +81,23 @@ def gen_data(args: Args) -> np.ndarray:
 
 
 def test(episode: np.ndarray) -> None:
-    enc = VariationalEncoder()
     episode = torch.from_numpy(episode)
+    latent = test_vae(episode)
+
+
+def test_vae(episode: torch.Tensor) -> torch.Tensor:
+    enc = VariationalEncoder()
+    assert len(episode) > 0
     for frame in episode:
         frame = preprocess_observation_(frame)
         z = enc.forward(frame)
     print(frame)
     print(f"latent z dims: {z.size()}")
+    return z
+
+
+def test_rssm(latent: torch.Tensor) -> torch.Tensor:
+    pass
 
 
 if __name__ == "__main__":
