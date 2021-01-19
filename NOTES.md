@@ -12,7 +12,7 @@ We use model-predictive control (MPC) to allow the agent to adapt its plan based
 ## Implementation:
 
 `config` is an `AttrDict`: A Dictionary, which allows access to its keys as attributes (i.e. `dict.key` instead of `dict['key']`). 
-`AttrDict` is a complex class hand-written by the authors. It's might be a beter idea to use [`dataclasses`](https://docs.python.org/3.7/library/dataclasses.html) from Python 3.7+ (cf. [StackOverflow](https://stackoverflow.com/a/14620633)).
+`AttrDict` is a complex class hand-written by the authors. It's might be a better idea to use [`dataclasses`](https://docs.python.org/3.7/library/dataclasses.html) from Python 3.7+ (cf. [StackOverflow](https://stackoverflow.com/a/14620633)).
 
 ### Reimplementation:
 
