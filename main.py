@@ -92,7 +92,7 @@ def test_vae(episode: torch.Tensor) -> torch.Tensor:
         frame = preprocess_observation_(frame)
         z = enc.forward(frame)
     print(frame)
-    print(f"latent z dims: {z.size()}")
+    print(f"latent z dims: {z.shape}")
     return z
 
 

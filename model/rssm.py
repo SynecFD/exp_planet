@@ -10,7 +10,7 @@ class RecurrentStateSpaceModel(nn.Module):
 
     def __init__(self, action_dim: int, state_dim: int = 30, hidden_dim: int = 200, latent_dim: int = 1024,
                  min_std_dev: float = 1e-1, activation_function: str = 'relu') -> None:
-        super(RecurrentStateSpaceModel, self).__init__()
+        super().__init__()
         self.activation_func = getattr(F, activation_function)
         self.rnn = nn.GRU(input_size=hidden_dim, hidden_size=hidden_dim)
 
