@@ -1,30 +1,38 @@
 import numpy as np
+from collections import deque, namedtuple
 import torch
+
+Experience = namedtuple('Experience', field_names=['state', 'action', 'reward', 'done'])
+
 
 class ExperienceReplay:
 
-    def __init__(self, size, observation_shape, action_space):
-        self.size = size
-        self.observations = np.empty((size, *observation_shape), dtype=np.uint8)
-        self.actions = np.empty((size, *action_space), dtype=np.float32)
-        self.rewards = np.empty((size, 1), dtype=np.float32)
-        self.terminal_state = np.empty((size, 1), dtype=np.bool)
-        self.index = 0
+    def __init__(self, size):
+        self.replay = deque(maxlen=size)
+        self.rng = np.random.default_rng()
 
-        self.full = False
+    def __len__(self) -> int:
+        return len(self.replay)
 
-    def append(self, observation, action, reward, done):
-        self.observations[self.index] = observation
-        self.actions[self.index] = action
-        self.rewards[self.index] = reward
-        self.terminal_state[self.index] = done
-
-        if self.index == self.size-1:
-            self.full = True
-        self.index = (self.index + 1) % self.size
+    def append(self, experience : Experience):
+        self.replay.append(experience)
 
     def sample(self, batch_size, length):
-        np.where(np.terminal_state)[0]
+        terminal_states = np.where(getattr(self.replay, 'done'))[0]
+        indices = np.random.choice(len(self.replay), batch_size, replace=False)
+        states, actions, rewards, dones = [], [], [], []
+        for _ in range(batch_size):
+            invalid_idx = True
+            while invalid_idx:
+                idx = self.rng.integers(low=0, high=len(self.replay) - length)
+                final_idx = idx + length - 1
+                closest_terminal = np.where(terminal_states >= idx).min()
+                invalid_idx = final_idx > closest_terminal
+            states.append(getattr(self.replay, 'state')[idx])
+            actions.append(getattr(self.replay, 'action')[idx])
+            rewards.append(getattr(self.replay, 'reward')[idx])
+            dones.append(getattr(self.replay, 'done')[idx])
 
-
+        return (np.array(states), np.array(actions), np.array(rewards, dtype=np.float32),
+                np.array(dones, dtype=np.bool))
 
