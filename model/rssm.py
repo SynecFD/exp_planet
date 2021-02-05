@@ -4,7 +4,14 @@ import torch
 from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
+from typing import Optional
 
+
+# belief = torch.zeros(1, args.belief_size, device=args.device)
+# posterior_state = torch.zeros(1, args.state_size, device=args.device)
+
+# state = torch.zeros(args.batch_size, args.state_dim, device=device)
+# rnn_hidden = torch.zeros(args.batch_size, args.rnn_hidden_dim, device=device)
 
 class RecurrentStateSpaceModel(nn.Module):
 
@@ -25,16 +32,17 @@ class RecurrentStateSpaceModel(nn.Module):
         self.fc_state_mean_posterior = nn.Linear(hidden_dim, state_dim)
         self.fc_state_std_dev_posterior = nn.Linear(hidden_dim, state_dim)
 
-    def forward(self, prev_state: torch.Tensor, prev_action: torch.Tensor, recurrent_hidden_state: torch.Tensor,
-                latent_observation: torch.Tensor) -> (Normal, Normal, torch.Tensor):
+    def forward(self, prev_state: Optional[torch.Tensor], prev_action: torch.Tensor,
+                recurrent_hidden_state: Optional[torch.Tensor], latent_observation: torch.Tensor) -> (
+            Normal, Normal, torch.Tensor):
         """Compute environment state prior & state filtering posterior
 
         Note: Latent observation must be one time-step ahead of state and action.
         h_t = f(h_t-1, s_t-1, a_t-1)
         => p(s_t | h_t) & q(s_t | h_t, o_t)
         """
-        state_prior, recurrent_hidden_state = self.prior(prev_state, prev_action, recurrent_hidden_state)
-        state_posterior = self.posterior(recurrent_hidden_state, latent_observation)
+        state_prior, recurrent_hidden_state = self._prior(prev_state, prev_action, recurrent_hidden_state)
+        state_posterior = self._posterior(recurrent_hidden_state, latent_observation)
         return state_prior, state_posterior, recurrent_hidden_state
 
     def _prior(self, prev_state, prev_action, recurrent_hidden_state) -> (Normal, torch.Tensor):
@@ -43,10 +51,15 @@ class RecurrentStateSpaceModel(nn.Module):
         h_t = f(h_t-1, s_t-1, a_t-1)
         => p(s_t | h_t)
         """
+        if prev_state is None:
+            batch_size = prev_action.shape[0]
+            action_dim = sum(prev_action.shape[1:])
+            state_dim = self.fc_latent_state_action.in_features - action_dim
+            prev_state = torch.zeros(batch_size, state_dim)
         input = torch.cat([prev_state, prev_action], dim=1)
 
         hidden_state = self.activation_func(self.fc_latent_state_action(input))
-        recurrent_hidden_state = self.rnn(hidden_state, recurrent_hidden_state)
+        recurrent_hidden_state, last_recurrent_hidden_state = self.rnn(hidden_state, recurrent_hidden_state)
         hidden_state = self.activation_func(self.fc_latent_state_prior(recurrent_hidden_state))
 
         mean = self.fc_state_mean_prior(hidden_state)

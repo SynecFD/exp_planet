@@ -20,7 +20,7 @@ class ExperienceReplay:
 
     def sample(self, batch_size: int, length: int) -> Tuple[np.array, np.array, np.array, np.array]:
         terminal_states = np.where(getattr(self.replay, 'done'))[0]
-        indices = np.random.choice(len(self.replay), batch_size, replace=False)
+        indices = np.random.choice(len(self), batch_size, replace=False)
         states, actions, rewards, dones = [], [], [], []
         for _ in range(batch_size):
             invalid_idx = True
