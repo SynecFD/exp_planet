@@ -4,7 +4,7 @@ from gym import Env, Wrapper
 
 
 class ActionRepeat(Wrapper):
-    """Repeates actions over n-steps while acummulating the received reward."""
+    """Repeats actions over n-steps while accumulating the received reward."""
 
     def __init__(self, env: Env, times: int) -> None:
         """Creates an action repeat wrapper.
