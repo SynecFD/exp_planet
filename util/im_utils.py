@@ -1,5 +1,4 @@
-from torch import Tensor, rand_like, float32, cat, split
-from typing import Tuple, Union, List
+from torch import Tensor, rand_like, float32
 
 
 def preprocess_observation_(observation: Tensor, bit_depth: int = 5) -> Tensor:
@@ -15,13 +14,3 @@ def preprocess_observation_(observation: Tensor, bit_depth: int = 5) -> Tensor:
     h, w, c = range(observation.ndim - 3, observation.ndim)
     observation = observation.permute(c, h, w)
     return observation
-
-
-def concatenate_batch_sequences(batch_seq: Union[Tuple[Tensor, ...], List[Tensor]]) -> Tuple[Tensor, List[int]]:
-    seq_lengths = [seq.shape[0] for seq in batch_seq]
-    concat = cat(batch_seq)
-    return concat, seq_lengths
-
-
-def split_into_batch_sequences(tensor: Tensor, seq_lengths: List[int]) -> Tuple[Tensor, ...]:
-    return split(tensor, seq_lengths)
