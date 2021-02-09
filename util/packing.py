@@ -6,13 +6,13 @@ from torch import Tensor
 from torch.nn.utils.rnn import PackedSequence
 
 
-def concatenate_batch_sequences(batch_seq: Union[Tuple[Tensor, ...], List[Tensor]]) -> Tuple[Tensor, List[int]]:
+def concatenate_batch_sequences(batch_seq: Union[Tuple[Tensor, ...], List[Tensor]]) -> Tuple[Tensor, Tensor]:
     seq_lengths = [seq.size(0) for seq in batch_seq]
     concat = torch.cat(batch_seq)
-    return concat, seq_lengths
+    return concat, torch.as_tensor(seq_lengths, device=concat.device)
 
 
-def split_into_batch_sequences(tensor: Tensor, seq_lengths: List[int]) -> Tuple[Tensor, ...]:
+def split_into_batch_sequences(tensor: Tensor, seq_lengths: Tensor) -> Tuple[Tensor, ...]:
     return torch.split(tensor, seq_lengths)
 
 
