@@ -16,8 +16,7 @@ def split_into_batch_sequences(tensor: Tensor, seq_lengths: List[int]) -> Tuple[
     return torch.split(tensor, seq_lengths)
 
 
-def pack_padded_sequence(batch: Tensor, lengths: List[int], enforce_sorted: bool = True) \
-        -> Union[PackedSequence, Tensor]:
+def pack_padded_sequence(batch: Tensor, lengths: List[int], enforce_sorted: bool = True) -> PackedSequence:
     if enforce_sorted and not is_sorted(lengths, reverse=True):
         rows = list(range(batch.size(0)))
         # https://stackoverflow.com/a/45514542/4907774
