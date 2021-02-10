@@ -9,7 +9,7 @@ from torch.nn.utils.rnn import PackedSequence
 def concatenate_batch_sequences(batch_seq: Union[tuple[Tensor, ...], list[Tensor]]) -> tuple[Tensor, list[int]]:
     seq_lengths = [seq.size(0) for seq in batch_seq]
     concat = torch.cat(batch_seq)
-    return concat, torch.as_tensor(seq_lengths, device=concat.device)
+    return concat, seq_lengths
 
 
 def split_into_batch_sequences(tensor: Tensor, seq_lengths: list[int]) -> tuple[Tensor, ...]:

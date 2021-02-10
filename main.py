@@ -1,15 +1,15 @@
+from dataclasses import dataclass, asdict
+from pathlib import Path
+
 import gym
+# noinspection PyUnresolvedReferences
 import pybullet_envs
 import torch
-import numpy as np
 
-from dataclasses import dataclass
 from model import VariationalEncoder, RecurrentStateSpaceModel
-from util.im_utils import preprocess_observation_
-from pathlib import Path
-from typing import Tuple
+from util import preprocess_observation_, concatenate_batch_sequences, split_into_batch_sequences, pad_sequence
 
-EPISODE_PATH = Path.cwd() / "data" / "episode.npz"
+EPISODE_PATH = Path.cwd() / "data" / "episode.pt"
 EPISODE_PATH.parent.mkdir(exist_ok=True)
 
 
@@ -30,7 +30,13 @@ class Args:
     episodes: int = 1
 
 
-def get_data(args: Args = None, recreate: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+@dataclass
+class Batch:
+    episode_actions: list[torch.Tensor]
+    episodes: list[torch.Tensor]
+
+
+def get_data(args: Args = None, recreate: bool = False) -> Batch:
     if recreate and args is None:
         raise ValueError("Cannot recreate episode without args")
     path = EPISODE_PATH
@@ -42,14 +48,14 @@ def get_data(args: Args = None, recreate: bool = False) -> Tuple[np.ndarray, np.
         raise ValueError("Cannot recreate episode without args")
 
 
-def load_data_from_disk() -> Tuple[np.ndarray, np.ndarray]:
+def load_data_from_disk() -> Batch:
     path = EPISODE_PATH
-    dict = np.load(path, allow_pickle=False, fix_imports=False)
+    batch_dict = torch.load(path)
     print(f"Episode loaded from {path}")
-    return dict["episode"], dict["actions"]
+    return Batch(**batch_dict)
 
 
-def gen_data(args: Args) -> Tuple[np.ndarray, np.ndarray]:
+def gen_data(args: Args) -> Batch:
     env = gym.make(args.env)
     env.env.configure(args)
     env.env._render_width = 64
@@ -62,55 +68,51 @@ def gen_data(args: Args) -> Tuple[np.ndarray, np.ndarray]:
     episode_actions = []
     episodes = []
     for _ in range(args.episodes):
-        actions = []
-        episode = []
+        seq_actions = []
+        sequence = []
         for _ in range(args.steps):
             action = env.action_space.sample()
-            actions.append(action)
+            seq_actions.append(action)
             obs, rewards, done, _ = env.step(action)
             if args.rgb:
                 rgb = env.render(mode="rgb_array")
                 # print(f"RGB dims = {rgb.shape}")
-                episode.append(rgb)
+                sequence.append(rgb)
             if done:
                 break
             # print("obs =")
             # print(obs)
             # print(f"rewards = {rewards}")
             # print(f"done = {done}")
-        episode_actions.append(actions)
-        episodes.append(episode)
-    episode_actions = torch.stack(list(map(torch.from_numpy, episode_actions)))
-    episodes = torch.stack(list(map(torch.from_numpy, episodes)))
-    print(f"stacked obs = {episodes.shape}")
+        episode_actions.append(torch.stack(list(map(torch.from_numpy, seq_actions))))
+        episodes.append(torch.stack(list(map(torch.from_numpy, sequence))))
     path = EPISODE_PATH
-    np.savez_compressed(path, episode=episodes, actions=episode_actions)
-    print(f"Episode saved to {path}")
-    return episodes, episode_actions
+    batch = Batch(episode_actions, episodes)
+    torch.save(asdict(batch), path)
+    print(f"Batch saved to {path}")
+    return batch
 
 
-def test(episode: np.ndarray, actions: np.ndarray) -> None:
-    episode = torch.from_numpy(episode)
-    actions = torch.from_numpy(actions)
-    latent = test_vae(episode)
-    test_rssm(latent, actions)
+def test(batch: Batch) -> None:
+    latent_batch = test_vae(batch.episodes)
+    test_rssm(latent_batch, batch.episode_actions)
 
 
-def test_vae(episode: torch.Tensor) -> torch.Tensor:
+def test_vae(episode: list[torch.Tensor]) -> tuple[torch.Tensor, ...]:
     enc = VariationalEncoder()
-    assert len(episode) > 0
-    # FIXME Do it in batch not in loop! Concatenate from [Batch, Seq, img^3] to [Batch * Seq, img^3]
-    for frame in episode:
-        frame = preprocess_observation_(frame)
-        z = enc.forward(frame)
-    print(frame)
+    batch, lengths = concatenate_batch_sequences(episode)
+    batch = preprocess_observation_(batch)
+    z = enc.forward(batch)
     print(f"latent z dims: {z.shape}")
-    return z
+    return split_into_batch_sequences(batch, lengths)
 
 
-def test_rssm(latent: torch.Tensor, prev_actions: torch.Tensor) -> torch.Tensor:
-    action_dim = sum(prev_actions.shape[1:])
+def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]) -> torch.Tensor:
+    action_dim = sum(prev_actions[0].shape[1:])
     rssm = RecurrentStateSpaceModel(action_dim)
+    latent, latent_length = pad_sequence(latent)
+    prev_actions, action_lengths = pad_sequence(prev_actions)
+    assert latent.shape[:2] == prev_actions.shape[:2], "mismatch between latent dims and actions dims"
     state_prior, state_posterior, recurrent_hidden_state = rssm.forward(prev_state=None, prev_action=prev_actions,
                                                                         recurrent_hidden_state=None,
                                                                         latent_observation=latent)
@@ -124,5 +126,5 @@ def test_rssm(latent: torch.Tensor, prev_actions: torch.Tensor) -> torch.Tensor:
 
 if __name__ == "__main__":
     args = Args(env="HalfCheetahBulletEnv-v0", render=False, rgb=True, steps=10, episodes=2)
-    episode, actions = get_data(args, recreate=True)
-    test(episode, actions)
+    batch = get_data(args, recreate=True)
+    test(batch)
