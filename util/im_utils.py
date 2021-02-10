@@ -11,6 +11,5 @@ def preprocess_observation_(observation: Tensor, bit_depth: int = 5) -> Tensor:
     observation = observation.to(dtype=float32, copy=True)
     observation.floor_divide_(2 ** (8 - bit_depth)).div_(2 ** bit_depth).sub_(0.5)
     observation.add_(rand_like(observation).div_(2 ** bit_depth))
-    h, w, c = range(observation.ndim - 3, observation.ndim)
-    observation = observation.permute(c, h, w)
+    observation = observation.permute(0, 3, 1, 2)
     return observation
