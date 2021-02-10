@@ -104,7 +104,7 @@ def test_vae(episode: list[torch.Tensor]) -> tuple[torch.Tensor, ...]:
     batch = preprocess_observation_(batch)
     z = enc.forward(batch)
     print(f"latent z dims: {z.shape}")
-    return split_into_batch_sequences(batch, lengths)
+    return split_into_batch_sequences(z, lengths)
 
 
 def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]) -> torch.Tensor:
@@ -113,15 +113,18 @@ def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]
     latent, latent_length = pad_sequence(latent)
     prev_actions, action_lengths = pad_sequence(prev_actions)
     assert latent.shape[:2] == prev_actions.shape[:2], "mismatch between latent dims and actions dims"
-    state_prior, state_posterior, recurrent_hidden_state = rssm.forward(prev_state=None, prev_action=prev_actions,
+    state_prior, state_posterior, recurrent_hidden_state = rssm.forward(prev_state=None,
+                                                                        prev_action=prev_actions,
+                                                                        action_lengths=action_lengths,
                                                                         recurrent_hidden_state=None,
-                                                                        latent_observation=latent)
-    print(f"state_prior.shape = {state_prior.shape}")
-    print(f"state_posterior.shape = {state_posterior.shape}")
-    print(f"recurrent_hidden_state.shape = {recurrent_hidden_state.shape}")
-    print(f"state_prior = {state_prior}")
-    print(f"state_posterior = {state_posterior}")
-    print(f"recurrent_hidden_state = {recurrent_hidden_state}")
+                                                                        latent_observation=latent,
+                                                                        latent_seq_lengths=latent_length)
+    print(f"state_prior.shape = {state_prior}")
+    print(f"state_posterior.shape = {state_posterior}")
+    # print(f"recurrent_hidden_state.shape = {recurrent_hidden_state.shape}")
+    # print(f"state_prior = {state_prior}")
+    # print(f"state_posterior = {state_posterior}")
+    # print(f"recurrent_hidden_state = {recurrent_hidden_state}")
 
 
 if __name__ == "__main__":
