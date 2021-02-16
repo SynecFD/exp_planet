@@ -1,7 +1,5 @@
 import numpy as np
 from collections import deque, namedtuple
-from typing import Tuple
-import torch
 
 Experience = namedtuple('Experience', field_names=['state', 'action', 'reward', 'done'])
 
@@ -18,7 +16,7 @@ class ExperienceReplay:
     def append(self, experience: Experience) -> None:
         self.replay.append(experience)
 
-    def sample(self, batch_size: int, length: int) -> Tuple[np.array, np.array, np.array, np.array]:
+    def sample(self, batch_size: int, length: int) -> tuple[np.array, np.array, np.array, np.array]:
         terminal_states = np.where(getattr(self.replay, 'done'))[0]
         indices = np.random.choice(len(self), batch_size, replace=False)
         states, actions, rewards, dones = [], [], [], []
