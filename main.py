@@ -127,6 +127,10 @@ def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]
     # print(f"recurrent_hidden_state = {recurrent_hidden_state}")
 
 
+def test_dataloader() -> None:
+    pass
+
+
 if __name__ == "__main__":
     args = Args(env="HalfCheetahBulletEnv-v0", render=False, rgb=True, steps=10, episodes=2)
     batch = get_data(args, recreate=True)
