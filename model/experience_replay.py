@@ -31,9 +31,9 @@ class ExperienceReplay:
         rewards = torch.as_tensor(self.current_reward_buffer)
         self.append(Experience(states, actions, rewards))
         # reset buffer for new episode
-        self.current_frame_buffer = []
-        self.current_action_buffer = []
-        self.current_reward_buffer = []
+        self.current_frame_buffer.clear()
+        self.current_action_buffer.clear()
+        self.current_reward_buffer.clear()
 
     def sample(self, batch_size: int, length: int) -> list[torch.tensor, torch.tensor, torch.tensor]:
         state_list, action_list, reward_list = [], [], []
@@ -43,13 +43,12 @@ class ExperienceReplay:
             states = getattr(episode, 'states')
             actions = getattr(episode, 'actions')
             rewards = getattr(episode, 'rewards')
-            starting_idx = -1
-            while starting_idx < 0 or starting_idx > len(episode):
-                starting_idx = self.rng.integers(low=0, high=length-1)
+            max_length = min(length, len(episode))
+            starting_idx = self.rng.integers(low=0, high=max_length-1)
 
-            states.narrow(0, starting_idx, length + starting_idx)
-            actions.narrow(0, starting_idx, length + starting_idx)
-            rewards.narrow(0, starting_idx, length + starting_idx)
+            states = states.narrow(0, starting_idx, length + starting_idx)
+            actions = actions.narrow(0, starting_idx, length + starting_idx)
+            rewards = rewards.narrow(0, starting_idx, length + starting_idx)
             state_list.append(states)
             action_list.append(actions)
             reward_list.append(rewards)
