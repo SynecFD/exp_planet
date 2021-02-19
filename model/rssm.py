@@ -78,6 +78,8 @@ class RecurrentStateSpaceModel(nn.Module):
             prev_state = torch.zeros(batch_size, seq_length, state_dim)
         input = torch.cat([prev_state, prev_action], dim=2)
 
+        # Q: Padded tensor unpacked in linear layer?
+        # A: Write custom masked loss function (see chatbot tutorial)
         hidden_state = self.activation_func(self.fc_latent_state_action(input))
 
         # Start of recurrent layer (GRU)
@@ -96,7 +98,8 @@ class RecurrentStateSpaceModel(nn.Module):
 
         mean = self.fc_state_mean_prior(hidden_state)
         std_dev = F.softplus(self.fc_state_std_dev_prior(hidden_state)) + self.min_std_dev
-        # FIXME: Don't parameterize Normal with (batch x sequence x output)-Tensor. Maybe list?
+        # Q: Don't parameterize Normal with (batch x sequence x output)-Tensor. Maybe list?
+        # A: KL Div is the same not matter the parameterization dimensions
         return Normal(loc=mean, scale=std_dev), recurrent_hidden_state
 
     def _posterior(self, recurrent_hidden_state, latent_observation) -> Normal:

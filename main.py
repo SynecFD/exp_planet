@@ -65,6 +65,7 @@ def gen_data(args: Args) -> Batch:
         env.render(mode="human")
     env.reset()
     print(f"action space: {env.action_space.shape}")
+    print(f"action space min/max: {env.action_space}")
     episode_actions = []
     episodes = []
     for _ in range(args.episodes):
@@ -110,6 +111,9 @@ def test_vae(episode: list[torch.Tensor]) -> tuple[torch.Tensor, ...]:
 def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]) -> torch.Tensor:
     action_dim = sum(prev_actions[0].shape[1:])
     rssm = RecurrentStateSpaceModel(action_dim)
+    # FIXME: DEBUG only
+    latent = (latent[0], latent[1][:5])
+    prev_actions = (prev_actions[0], prev_actions[1][:5])
     latent, latent_length = pad_sequence(latent)
     prev_actions, action_lengths = pad_sequence(prev_actions)
     assert latent.shape[:2] == prev_actions.shape[:2], "mismatch between latent dims and actions dims"
@@ -121,6 +125,12 @@ def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]
                                                                         latent_seq_lengths=latent_length)
     print(f"state_prior.shape = {state_prior}")
     print(f"state_posterior.shape = {state_posterior}")
+
+    three_dim_kl = torch.distributions.kl.kl_divergence(state_prior, state_posterior).flatten(end_dim=1)
+    p = torch.distributions.normal.Normal(state_prior.mean.flatten(end_dim=1), state_prior.stddev.flatten(end_dim=1))
+    q = torch.distributions.normal.Normal(state_posterior.mean.flatten(end_dim=1), state_posterior.stddev.flatten(end_dim=1))
+    two_dim_kl = torch.distributions.kl.kl_divergence(p, q)
+    print(f"2D == flat 3D?: {(three_dim_kl == two_dim_kl).all()}")
     # print(f"recurrent_hidden_state.shape = {recurrent_hidden_state.shape}")
     # print(f"state_prior = {state_prior}")
     # print(f"state_posterior = {state_posterior}")

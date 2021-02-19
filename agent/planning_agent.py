@@ -1,22 +1,61 @@
+import torch
+from gym import Space
 from torch import Tensor
-from ..model import RewardModel, RecurrentStateSpaceModel, VariationalEncoder
-from ..util.im_utils import preprocess_observation_
+from torch.distributions import Normal
+
+from model import RewardModel, RecurrentStateSpaceModel, VariationalEncoder
+from util import preprocess_observation_
 
 
 class PlanningAgent:
     """Model-predictive control (MPC) planner with cross-entropy method (CEM)"""
 
-    def __init__(self, observation_model: VariationalEncoder, transition_model: RecurrentStateSpaceModel,
-                 reward_model: RewardModel, planning_horizon: int, num_opt_iterations: int, num_candidates: int,
-                 num_top_candidates: int):
+    def __init__(self,
+                 observation_model: VariationalEncoder,
+                 transition_model: RecurrentStateSpaceModel,
+                 reward_model: RewardModel,
+                 planning_horizon: int,
+                 num_opt_iterations: int, num_candidates: int,
+                 num_top_candidates: int,
+                 action_space: Space) -> None:
+        # Models
         self.observation_model = observation_model
         self.transition_model = transition_model
         self.reward_model = reward_model
+
+        # Hyper-Parameters
         self.planning_horizon = planning_horizon
         self.num_opt_iterations = num_opt_iterations
         self.num_candidates = num_candidates
         self.num_top_candidates = num_top_candidates
+        self.action_space = action_space
 
+        self.init_action = torch.zeros(1, 1, self.action_space.shape)
+        self.seq_len = torch.ones(1)
+
+    @torch.no_grad()
     def __call__(self, observation: Tensor):
-        if not (observation.max() <= 0.5 and observation.min() >= -0.5 and observation.size() == (1, 3, 64, 64)):
+        if not (observation.max() <= 0.5 and observation.min() >= -0.5 and observation.shape[-3:] == (3, 64, 64)):
             observation = preprocess_observation_(observation)
+
+        device = observation.device  # FIXME: does this work? or are obs always on CPU?
+        self.init_action.to(device)
+
+        latent_observation = self.observation_model(observation)
+        _, posterior_belief, recurrent_hidden_state = self.transition_model(self.init_action, self.seq_len,
+                                                                            latent_observation, self.seq_len)
+        posterior_sample = posterior_belief.sampe()
+
+        # DEBUG
+        print(f"Planning on device: {device}")
+        action_belief = Normal(torch.zeros((self.planning_horizon, self.action_space.shape), device=device),
+                               torch.ones((self.planning_horizon, self.action_space.shape), device=device))
+        for _ in range(self.num_opt_iterations):
+            candidate_actions = action_belief.sample((self.num_candidates,))
+            # FIXME: Clamping assumes action_space.bounded_above & action_space.bounded_below to be all true and
+            #  action_space.high & action_space.low with equal values in each (see:
+            #  https://github.com/pytorch/pytorch/issues/2793)
+            candidate_actions = candidate_actions.clamp_(min=self.action_space.low.max(),
+                                                         max=self.action_space.high.min())
+
+            self.transition_model._prior(posterior_sample, candidate_actions, recurrent_hidden_state)
