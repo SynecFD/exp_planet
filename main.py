@@ -5,8 +5,10 @@ import gym
 # noinspection PyUnresolvedReferences
 import pybullet_envs
 import torch
+from gym import Space
 
-from model import VariationalEncoder, RecurrentStateSpaceModel
+from agent import PlanningAgent
+from model import VariationalEncoder, RecurrentStateSpaceModel, RewardModel
 from util import preprocess_observation_, concatenate_batch_sequences, split_into_batch_sequences, pad_sequence
 
 EPISODE_PATH = Path.cwd() / "data" / "episode.pt"
@@ -108,7 +110,7 @@ def test_vae(episode: list[torch.Tensor]) -> tuple[torch.Tensor, ...]:
     return split_into_batch_sequences(z, lengths)
 
 
-def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]) -> torch.Tensor:
+def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]) -> None:
     action_dim = sum(prev_actions[0].shape[1:])
     rssm = RecurrentStateSpaceModel(action_dim)
     # FIXME: DEBUG only
@@ -128,13 +130,18 @@ def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]
 
     three_dim_kl = torch.distributions.kl.kl_divergence(state_prior, state_posterior).flatten(end_dim=1)
     p = torch.distributions.normal.Normal(state_prior.mean.flatten(end_dim=1), state_prior.stddev.flatten(end_dim=1))
-    q = torch.distributions.normal.Normal(state_posterior.mean.flatten(end_dim=1), state_posterior.stddev.flatten(end_dim=1))
+    q = torch.distributions.normal.Normal(state_posterior.mean.flatten(end_dim=1),
+                                          state_posterior.stddev.flatten(end_dim=1))
     two_dim_kl = torch.distributions.kl.kl_divergence(p, q)
     print(f"2D == flat 3D?: {(three_dim_kl == two_dim_kl).all()}")
     # print(f"recurrent_hidden_state.shape = {recurrent_hidden_state.shape}")
     # print(f"state_prior = {state_prior}")
     # print(f"state_posterior = {state_posterior}")
     # print(f"recurrent_hidden_state = {recurrent_hidden_state}")
+
+
+def test_planner(obs: torch.Tensor, action_space: Space) -> None:
+    planner = PlanningAgent(VariationalEncoder(), RecurrentStateSpaceModel(sum(action_space.shape)), RewardModel())
 
 
 if __name__ == "__main__":
