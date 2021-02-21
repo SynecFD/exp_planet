@@ -6,6 +6,7 @@ import gym
 import pybullet_envs
 import torch
 
+from agent import EnvAgent
 from model import VariationalEncoder, RecurrentStateSpaceModel
 from util import preprocess_observation_, concatenate_batch_sequences, split_into_batch_sequences, pad_sequence
 
@@ -56,40 +57,8 @@ def load_data_from_disk() -> Batch:
 
 
 def gen_data(args: Args) -> Batch:
-    env = gym.make(args.env)
-    env.env.configure(args)
-    env.env._render_width = 64
-    env.env._render_height = 64
-    print(f"args.render = {args.render}")
-    if args.render:
-        env.render(mode="human")
-    env.reset()
-    print(f"action space: {env.action_space.shape}")
-    episode_actions = []
-    episodes = []
-    for _ in range(args.episodes):
-        seq_actions = []
-        sequence = []
-        for _ in range(args.steps):
-            action = env.action_space.sample()
-            seq_actions.append(action)
-            obs, rewards, done, _ = env.step(action)
-            if args.rgb:
-                rgb = env.render(mode="rgb_array")
-                # print(f"RGB dims = {rgb.shape}")
-                sequence.append(rgb)
-            if done:
-                break
-            # print("obs =")
-            # print(obs)
-            # print(f"rewards = {rewards}")
-            # print(f"done = {done}")
-        episode_actions.append(torch.stack(list(map(torch.from_numpy, seq_actions))))
-        episodes.append(torch.stack(list(map(torch.from_numpy, sequence))))
-    path = EPISODE_PATH
-    batch = Batch(episode_actions, episodes)
-    torch.save(asdict(batch), path)
-    print(f"Batch saved to {path}")
+    env_agent = EnvAgent(episode_path=EPISODE_PATH, args=args)
+    batch = env_agent.train()
     return batch
 
 

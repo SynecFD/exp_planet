@@ -40,9 +40,9 @@ class ExperienceReplay:
         for _ in range(batch_size):
             episode_idx = self.rng.integers(low=0, high=len(self.replay))
             episode = self.replay[episode_idx]
-            states = getattr(episode, 'states')
-            actions = getattr(episode, 'actions')
-            rewards = getattr(episode, 'rewards')
+            states = episode.states
+            actions = episode.actions
+            rewards = episode.rewards
             max_length = min(length, len(episode))
             starting_idx = self.rng.integers(low=0, high=max_length-1)
 
