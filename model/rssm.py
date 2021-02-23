@@ -41,10 +41,9 @@ class RecurrentStateSpaceModel(nn.Module):
                 prev_state: Optional[torch.Tensor],
                 prev_action: torch.Tensor,
                 action_lengths: torch.Tensor,
-                recurrent_hidden_state: Optional[torch.Tensor],
+                recurrent_hidden_states: Optional[torch.Tensor],
                 latent_observation: torch.Tensor,
-                latent_seq_lengths: torch.Tensor
-                ) -> tuple[Normal, Normal, torch.Tensor]:
+                ) -> tuple[Normal, Normal, torch.Tensor, torch.Tensor]:
         """Compute environment state prior & state filtering posterior
 
         Note: Latent observation must be one time-step ahead of state and action.
@@ -52,18 +51,20 @@ class RecurrentStateSpaceModel(nn.Module):
         => p(s_t | h_t) & q(s_t | h_t, o_t)
         """
         # FIXME: https://pytorch.org/docs/stable/notes/faq.html#pack-rnn-unpack-with-data-parallelism
-        state_prior, recurrent_hidden_state = self._prior(prev_state, prev_action,
-                                                          action_lengths,
-                                                          recurrent_hidden_state)
-        state_posterior = self._posterior(recurrent_hidden_state, latent_observation)
-        return state_prior, state_posterior, recurrent_hidden_state
+        state_prior, recurrent_hidden_states, next_recurrent_hidden_state = self._prior(prev_state, prev_action,
+                                                                                        action_lengths,
+                                                                                        recurrent_hidden_states)
+        state_posterior = self._posterior(recurrent_hidden_states, latent_observation)
+        print(f"prior size: {state_prior.sample().shape}")
+        print(f"posterior size: {state_posterior.sample().shape}")
+        return state_prior, state_posterior, recurrent_hidden_states, next_recurrent_hidden_state
 
     def _prior(self,
-               prev_state,
-               prev_action,
+               prev_state: Optional[torch.Tensor],
+               prev_action: torch.Tensor,
                action_lengths: torch.Tensor,
-               recurrent_hidden_state: Optional[torch.Tensor]
-               ) -> tuple[Normal, torch.Tensor]:
+               recurrent_hidden_states: Optional[torch.Tensor]
+               ) -> tuple[Normal, torch.Tensor, torch.Tensor]:
         """Compute environment state prior
 
         h_t = f(h_t-1, s_t-1, a_t-1)
@@ -78,6 +79,8 @@ class RecurrentStateSpaceModel(nn.Module):
             prev_state = torch.zeros(batch_size, seq_length, state_dim)
         input = torch.cat([prev_state, prev_action], dim=2)
 
+        # Q: Padded tensor unpacked in linear layer?
+        # A: Write custom masked loss function (see chatbot tutorial)
         hidden_state = self.activation_func(self.fc_latent_state_action(input))
 
         # Start of recurrent layer (GRU)
@@ -85,19 +88,20 @@ class RecurrentStateSpaceModel(nn.Module):
             hidden_state = pack_padded_sequence(hidden_state, action_lengths, batch_first=True, enforce_sorted=False)
 
         # output is: (recurrent_hidden_state, last_recurrent_hidden_state)
-        recurrent_hidden_state, _ = self.rnn(hidden_state, recurrent_hidden_state)
+        recurrent_hidden_states, next_recurrent_hidden_state = self.rnn(hidden_state, recurrent_hidden_states)
 
-        if isinstance(recurrent_hidden_state, PackedSequence):
-            recurrent_hidden_state, _ = pad_packed_sequence(recurrent_hidden_state, batch_first=True,
-                                                            total_length=total_action_seq_length)
+        if isinstance(recurrent_hidden_states, PackedSequence):
+            recurrent_hidden_states, _ = pad_packed_sequence(recurrent_hidden_states, batch_first=True,
+                                                             total_length=total_action_seq_length)
         # End of recurrent layer (GRU)
 
-        hidden_state = self.activation_func(self.fc_latent_state_prior(recurrent_hidden_state))
+        hidden_state = self.activation_func(self.fc_latent_state_prior(recurrent_hidden_states))
 
         mean = self.fc_state_mean_prior(hidden_state)
         std_dev = F.softplus(self.fc_state_std_dev_prior(hidden_state)) + self.min_std_dev
-        # FIXME: Don't parameterize Normal with (batch x sequence x output)-Tensor. Maybe list?
-        return Normal(loc=mean, scale=std_dev), recurrent_hidden_state
+        # Q: Don't parameterize Normal with (batch x sequence x output)-Tensor. Maybe list?
+        # A: KL Div is the same not matter the parameterization dimensions
+        return Normal(loc=mean, scale=std_dev), recurrent_hidden_states, next_recurrent_hidden_state
 
     def _posterior(self, recurrent_hidden_state, latent_observation) -> Normal:
         """Compute environment state filtering posterior
@@ -111,5 +115,7 @@ class RecurrentStateSpaceModel(nn.Module):
         # layer of double the size which is then chunked into two output tensors
         mean = self.fc_state_mean_posterior(hidden_state)
         std_dev = self.min_std_dev + F.softplus(self.fc_state_std_dev_posterior(hidden_state))
-        # FIXME: Don't parameterize Normal with (batch x sequence x output)-Tensor. Maybe list?
+
+        # Q: Don't parameterize Normal with (batch x sequence x output)-Tensor. Maybe list?
+        # A: Doesn't make a difference for KL-Loss
         return Normal(loc=mean, scale=std_dev)
