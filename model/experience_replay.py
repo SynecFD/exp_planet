@@ -21,7 +21,7 @@ class ExperienceReplay:
     def append(self, experience: Experience) -> None:
         self.replay.append(experience)
 
-    def add_step_data(self, state: torch.tensor, action: torch.tensor, reward: float) -> None:
+    def add_step_data(self, state: torch.Tensor, action: torch.Tensor, reward: float) -> None:
         self.current_frame_buffer.append(state)
         self.current_action_buffer.append(action)
         self.current_reward_buffer.append(reward)
@@ -36,7 +36,7 @@ class ExperienceReplay:
         self.current_action_buffer.clear()
         self.current_reward_buffer.clear()
 
-    def sample(self, batch_size: int, length: int) -> tuple[list[torch.tensor], list[torch.tensor], list[torch.tensor]]:
+    def sample(self, batch_size: int, length: int) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
         episode_idx = self.rng.choice(len(self), size=batch_size, replace=False, shuffle=False)
         episodes = [self.replay[idx] for idx in episode_idx]
         starting_idx = self.rng.integers(low=0, high=[min(length, state.size(0)) - 1 for state, _, _ in episodes])
