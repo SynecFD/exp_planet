@@ -37,21 +37,9 @@ class ExperienceReplay:
         self.current_reward_buffer.clear()
 
     def sample(self, batch_size: int, length: int) -> tuple[list[torch.tensor], list[torch.tensor], list[torch.tensor]]:
-        state_list, action_list, reward_list = [], [], []
-        for _ in range(batch_size):
-            episode_idx = self.rng.integers(low=0, high=len(self.replay))
-            episode = self.replay[episode_idx]
-            states = episode.states
-            actions = episode.actions
-            rewards = episode.rewards
-            max_length = min(length, len(episode))
-            starting_idx = self.rng.integers(low=0, high=max_length - 1)
-
-            states = states.narrow(0, starting_idx, length + starting_idx)
-            actions = actions.narrow(0, starting_idx, length + starting_idx)
-            rewards = rewards.narrow(0, starting_idx, length + starting_idx)
-            state_list.append(states)
-            action_list.append(actions)
-            reward_list.append(rewards)
-
-        return state_list, action_list, reward_list
+        episode_idx = self.rng.choice(len(self), size=batch_size, replace=False, shuffle=False)
+        episodes = [self.replay[idx] for idx in episode_idx]
+        starting_idx = self.rng.integers(low=0, high=[min(length, state.size(0)) - 1 for state, _, _ in episodes])
+        # noinspection PyTypeChecker
+        return tuple([ith_attrib.narrow(0, idx, length + idx) for ith_attrib, idx in zip(attr, starting_idx)]
+                     for attr in zip(*episodes))
