@@ -1,6 +1,6 @@
 from torch import Tensor
-from ..model import RewardModel, RecurrentStateSpaceModel, VariationalEncoder
-from ..util.im_utils import preprocess_observation_
+from model import RewardModel, RecurrentStateSpaceModel, VariationalEncoder
+from util.im_utils import preprocess_observation_
 
 
 class PlanningAgent:

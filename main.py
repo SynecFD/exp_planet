@@ -1,13 +1,12 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, astuple
 from pathlib import Path
 
-import gym
 # noinspection PyUnresolvedReferences
 import pybullet_envs
 import torch
 
-from agent import EnvAgent
-from model import VariationalEncoder, RecurrentStateSpaceModel
+from agent import EnvAgent, Batch
+from model import VariationalEncoder, RecurrentStateSpaceModel, ExperienceReplay
 from util import preprocess_observation_, concatenate_batch_sequences, split_into_batch_sequences, pad_sequence
 
 EPISODE_PATH = Path.cwd() / "data" / "episode.pt"
@@ -29,12 +28,6 @@ class Args:
     rgb: bool = False
     steps: int = 1
     episodes: int = 1
-
-
-@dataclass
-class Batch:
-    episode_actions: list[torch.Tensor]
-    episodes: list[torch.Tensor]
 
 
 def get_data(args: Args = None, recreate: bool = False) -> Batch:
@@ -96,11 +89,20 @@ def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]
     # print(f"recurrent_hidden_state = {recurrent_hidden_state}")
 
 
-def test_dataloader() -> None:
-    pass
+def test_dataloader(batch: Batch) -> None:
+    replay = ExperienceReplay(2)
+    for eps in zip(*astuple(batch)):
+        for action, reward, state in zip(*eps):
+            replay.add_step_data(state, action, reward)
+        replay.stack_episode()
+    states, actions, rewards = replay.sample(batch_size=1, length=5)
+    print(f"{states=}")
+    print(f"{actions=}")
+    print(f"{rewards=}")
 
 
 if __name__ == "__main__":
     args = Args(env="HalfCheetahBulletEnv-v0", render=False, rgb=True, steps=10, episodes=2)
-    batch = get_data(args, recreate=True)
-    test(batch)
+    batch = get_data(args, recreate=False)
+    test_dataloader(batch)
+    # test(batch)
