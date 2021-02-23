@@ -1,6 +1,7 @@
+from collections import deque, namedtuple
+
 import numpy as np
 import torch
-from collections import deque, namedtuple
 
 Experience = namedtuple('Experience', field_names=['states', 'actions', 'rewards'])
 
@@ -35,7 +36,7 @@ class ExperienceReplay:
         self.current_action_buffer.clear()
         self.current_reward_buffer.clear()
 
-    def sample(self, batch_size: int, length: int) -> list[torch.tensor, torch.tensor, torch.tensor]:
+    def sample(self, batch_size: int, length: int) -> tuple[list[torch.tensor], list[torch.tensor], list[torch.tensor]]:
         state_list, action_list, reward_list = [], [], []
         for _ in range(batch_size):
             episode_idx = self.rng.integers(low=0, high=len(self.replay))
@@ -44,7 +45,7 @@ class ExperienceReplay:
             actions = episode.actions
             rewards = episode.rewards
             max_length = min(length, len(episode))
-            starting_idx = self.rng.integers(low=0, high=max_length-1)
+            starting_idx = self.rng.integers(low=0, high=max_length - 1)
 
             states = states.narrow(0, starting_idx, length + starting_idx)
             actions = actions.narrow(0, starting_idx, length + starting_idx)
@@ -54,4 +55,3 @@ class ExperienceReplay:
             reward_list.append(rewards)
 
         return state_list, action_list, reward_list
-
