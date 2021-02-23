@@ -5,7 +5,6 @@ import gym
 # noinspection PyUnresolvedReferences
 import pybullet_envs
 import torch
-from gym import Space
 
 from agent import PlanningAgent
 from model import VariationalEncoder, RecurrentStateSpaceModel, RewardModel
@@ -57,7 +56,7 @@ def load_data_from_disk() -> Batch:
     return Batch(**batch_dict)
 
 
-def gen_data(args: Args) -> Batch:
+def init_gym(args: Args) -> gym.Env:
     env = gym.make(args.env)
     env.env.configure(args)
     env.env._render_width = 64
@@ -66,6 +65,11 @@ def gen_data(args: Args) -> Batch:
     if args.render:
         env.render(mode="human")
     env.reset()
+    return env
+
+
+def gen_data(args: Args) -> Batch:
+    env = init_gym(args)
     print(f"action space: {env.action_space.shape}")
     print(f"action space min/max: {env.action_space}")
     episode_actions = []
@@ -116,15 +120,12 @@ def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]
     # FIXME: DEBUG only
     latent = (latent[0], latent[1][:5])
     prev_actions = (prev_actions[0], prev_actions[1][:5])
-    latent, latent_length = pad_sequence(latent)
+    latent, _ = pad_sequence(latent)
     prev_actions, action_lengths = pad_sequence(prev_actions)
     assert latent.shape[:2] == prev_actions.shape[:2], "mismatch between latent dims and actions dims"
-    state_prior, state_posterior, recurrent_hidden_state = rssm.forward(prev_state=None,
-                                                                        prev_action=prev_actions,
-                                                                        action_lengths=action_lengths,
-                                                                        recurrent_hidden_state=None,
-                                                                        latent_observation=latent,
-                                                                        latent_seq_lengths=latent_length)
+    recurrent_step = rssm.forward(prev_state=None, prev_action=prev_actions, action_lengths=action_lengths,
+                                  recurrent_hidden_states=None, latent_observation=latent)
+    state_prior, state_posterior, recurrent_hidden_states, next_hidden_state = recurrent_step
     print(f"state_prior.shape = {state_prior}")
     print(f"state_posterior.shape = {state_posterior}")
 
@@ -134,17 +135,26 @@ def test_rssm(latent: tuple[torch.Tensor, ...], prev_actions: list[torch.Tensor]
                                           state_posterior.stddev.flatten(end_dim=1))
     two_dim_kl = torch.distributions.kl.kl_divergence(p, q)
     print(f"2D == flat 3D?: {(three_dim_kl == two_dim_kl).all()}")
-    # print(f"recurrent_hidden_state.shape = {recurrent_hidden_state.shape}")
-    # print(f"state_prior = {state_prior}")
-    # print(f"state_posterior = {state_posterior}")
-    # print(f"recurrent_hidden_state = {recurrent_hidden_state}")
+    # print(f"{recurrent_hidden_states.shape = {}recurrent_hidden_states.shape=}")
+    # print(f"{state_prior=}")
+    # print(f"{state_posterior=}")
+    # print(f"{recurrent_hidden_states=}")
 
 
-def test_planner(obs: torch.Tensor, action_space: Space) -> None:
-    planner = PlanningAgent(VariationalEncoder(), RecurrentStateSpaceModel(sum(action_space.shape)), RewardModel())
+def test_planner(args: Args) -> None:
+    env = init_gym(args)
+    action_space = env.action_space
+    planner = PlanningAgent(VariationalEncoder(),
+                            RecurrentStateSpaceModel(sum(action_space.shape)),
+                            RewardModel(30, 200),
+                            action_space)
+    initial_obs = env.render(mode="rgb_array")
+    initial_obs = torch.from_numpy(initial_obs)
+    initial_action_mean = planner(initial_obs)
 
 
 if __name__ == "__main__":
     args = Args(env="HalfCheetahBulletEnv-v0", render=False, rgb=True, steps=10, episodes=2)
-    batch = get_data(args, recreate=True)
-    test(batch)
+    # batch = get_data(args, recreate=True)
+    # test(batch)
+    test_planner(args)
