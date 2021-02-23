@@ -27,8 +27,6 @@ class ReplayLoader(nn.Module):
 
 
 class ReplayBufferSet(IterableDataset):
-    def __getitem__(self, index) -> T_co:
-        pass
 
     def __init__(self, buffer: ExperienceReplay, sample_size: int) -> None:
         """
