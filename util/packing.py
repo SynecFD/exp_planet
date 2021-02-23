@@ -7,13 +7,21 @@ from torch.nn.utils.rnn import PackedSequence
 
 
 def concatenate_batch_sequences(batch_seq: Union[tuple[Tensor, ...], list[Tensor]]) -> tuple[Tensor, list[int]]:
+    """Variable length sequence: (batch, sequence, input) -> (batch x sequence, input)"""
     seq_lengths = [seq.size(0) for seq in batch_seq]
     concat = torch.cat(batch_seq)
     return concat, seq_lengths
 
 
 def split_into_batch_sequences(tensor: Tensor, seq_lengths: list[int]) -> tuple[Tensor, ...]:
+    """Variable length sequence: (batch x sequence, input) -> (batch, sequence, input)"""
     return torch.split(tensor, seq_lengths)
+
+
+def unpad_batch_sequence(tensor: Tensor, seq_lengths: Union[Tensor, list[int], tuple[int, ...]]) -> list[Tensor]:
+    # Batch-first
+    batch_seq = tensor.unbind()
+    return [seq.narrow(dim=0, start=0, length=length) for seq, length in zip(batch_seq, seq_lengths)]
 
 
 def pack_padded_sequence(batch: Tensor, lengths: Tensor, enforce_sorted: bool = True) -> PackedSequence:
