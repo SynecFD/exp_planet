@@ -1,13 +1,12 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, astuple
 from pathlib import Path
 
-import gym
 # noinspection PyUnresolvedReferences
 import pybullet_envs
 import torch
 
-from agent import PlanningAgent
-from model import VariationalEncoder, RecurrentStateSpaceModel, RewardModel
+from agent import EnvAgent, Batch, PlanningAgent
+from model import VariationalEncoder, RecurrentStateSpaceModel, RewardModel, ExperienceReplay
 from util import preprocess_observation_, concatenate_batch_sequences, split_into_batch_sequences, pad_sequence
 
 EPISODE_PATH = Path.cwd() / "data" / "episode.pt"
@@ -31,12 +30,6 @@ class Args:
     episodes: int = 1
 
 
-@dataclass
-class Batch:
-    episode_actions: list[torch.Tensor]
-    episodes: list[torch.Tensor]
-
-
 def get_data(args: Args = None, recreate: bool = False) -> Batch:
     if recreate and args is None:
         raise ValueError("Cannot recreate episode without args")
@@ -56,47 +49,9 @@ def load_data_from_disk() -> Batch:
     return Batch(**batch_dict)
 
 
-def init_gym(args: Args) -> gym.Env:
-    env = gym.make(args.env)
-    env.env.configure(args)
-    env.env._render_width = 64
-    env.env._render_height = 64
-    print(f"args.render = {args.render}")
-    if args.render:
-        env.render(mode="human")
-    env.reset()
-    return env
-
-
 def gen_data(args: Args) -> Batch:
-    env = init_gym(args)
-    print(f"action space: {env.action_space.shape}")
-    print(f"action space min/max: {env.action_space}")
-    episode_actions = []
-    episodes = []
-    for _ in range(args.episodes):
-        seq_actions = []
-        sequence = []
-        for _ in range(args.steps):
-            action = env.action_space.sample()
-            seq_actions.append(action)
-            obs, rewards, done, _ = env.step(action)
-            if args.rgb:
-                rgb = env.render(mode="rgb_array")
-                # print(f"RGB dims = {rgb.shape}")
-                sequence.append(rgb)
-            if done:
-                break
-            # print("obs =")
-            # print(obs)
-            # print(f"rewards = {rewards}")
-            # print(f"done = {done}")
-        episode_actions.append(torch.stack(list(map(torch.from_numpy, seq_actions))))
-        episodes.append(torch.stack(list(map(torch.from_numpy, sequence))))
-    path = EPISODE_PATH
-    batch = Batch(episode_actions, episodes)
-    torch.save(asdict(batch), path)
-    print(f"Batch saved to {path}")
+    env_agent = EnvAgent(episode_path=EPISODE_PATH, args=args)
+    batch = env_agent.train()
     return batch
 
 
@@ -153,8 +108,21 @@ def test_planner(args: Args) -> None:
     initial_action_mean = planner(initial_obs)
 
 
+def test_dataloader(batch: Batch) -> None:
+    replay = ExperienceReplay(2)
+    for eps in zip(*astuple(batch)):
+        for action, reward, state in zip(*eps):
+            replay.add_step_data(state, action, reward)
+        replay.stack_episode()
+    states, actions, rewards = replay.sample(batch_size=1, length=5)
+    print(f"{states=}")
+    print(f"{actions=}")
+    print(f"{rewards=}")
+
+
 if __name__ == "__main__":
     args = Args(env="HalfCheetahBulletEnv-v0", render=False, rgb=True, steps=10, episodes=2)
     # batch = get_data(args, recreate=True)
+    # test_dataloader(batch)
     # test(batch)
     test_planner(args)

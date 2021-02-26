@@ -1,14 +1,14 @@
+import torch
 import torch.nn as nn
-import numpy as np
 from torch.utils.data import DataLoader
-from torch.utils.data.dataset import IterableDataset
+from torch.utils.data.dataset import IterableDataset, T_co
 from model.experience_replay import ExperienceReplay
 
 
 class ReplayLoader(nn.Module):
 
-    def __init__(self, replay_size: int, episode_length: int, batch_size: int) -> None:
-        self.buffer = ExperienceReplay(replay_size)
+    def __init__(self, buffer: ExperienceReplay, episode_length: int, batch_size: int) -> None:
+        self.buffer = buffer
         self.episode_length = episode_length
         self.batch_size = batch_size
 
@@ -27,6 +27,7 @@ class ReplayLoader(nn.Module):
 
 
 class ReplayBufferSet(IterableDataset):
+
     def __init__(self, buffer: ExperienceReplay, sample_size: int) -> None:
         """
         Args:
@@ -36,7 +37,7 @@ class ReplayBufferSet(IterableDataset):
         self.buffer = buffer
         self.sample_size = sample_size
 
-    def __iter__(self) -> tuple[np.array, np.array, np.float32, np.bool]:
-        states, actions, rewards, dones = self.buffer.sample(self.sample_size)
-        for i in range(len(dones)):
-            yield states[i], actions[i], rewards[i], dones[i]
+    def __iter__(self) -> tuple[torch.tensor, torch.tensor, torch.tensor]:
+        states, actions, rewards = self.buffer.sample(self.sample_size)
+        for i in range(len(states)):
+            yield states[i], actions[i], rewards[i]
