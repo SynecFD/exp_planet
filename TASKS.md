@@ -3,6 +3,7 @@
 - [x] NIKLAS: Planner bauen
 - [x] NIKLAS: RSSM anpassen, damit Multi-GPU Packing möglich ist und korrekt unpacked wird.
 - [ ] RSSM + MaskedLoss Function schreiben, sodass RSSM Padding/Padding nicht für backward-Path berücksichtig wird.
+- [ ] Population based Optimizer schreiben (selber wie David Ha?)  
 - [ ] Previous Action im Planner auf echte previous action der observation setzen, falls Observation nicht t=0 ist?
 - [ ] LightningModule und DataModule schreiben
 - [ ] Args/Config-DataClass oder entsprechendes Click/Argparse dict einbauen
