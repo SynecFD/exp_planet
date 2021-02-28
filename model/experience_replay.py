@@ -1,4 +1,5 @@
 from collections import deque, namedtuple
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -52,3 +53,14 @@ class ExperienceReplay:
             reward_list.append(rewards)
 
         return state_list, action_list, reward_list
+
+    def persist(self, path: Path) -> None:
+        path.parent.mkdir(exist_ok=True)
+        torch.save(list(self.replay), path)
+
+    def load(self, path: Path):
+        if path.exists():
+            ex_rpl = torch.load(path)
+            self.replay.extend(ex_rpl)
+        else:
+            print("Invalid path to persisted ExperienceReplay")
