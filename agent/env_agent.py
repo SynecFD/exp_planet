@@ -1,7 +1,12 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
+from pathlib import Path
 
 import gym
 import torch
+from torch.distributions import Normal
+
+from agent import PlanningAgent
+from model import ExperienceReplay
 
 
 @dataclass
@@ -11,53 +16,43 @@ class Batch:
     episodes: list[torch.Tensor]
 
 
-class EnvAgent:
-    def __init__(self, episode_path, args):
+class Agent:
+    def __init__(self,
+                 planner: PlanningAgent,
+                 explore_noise: float,
+                 replay_buffer: ExperienceReplay,
+                 episode_path: Path,
+                 env: gym.Env,
+                 render: bool) -> None:
+        self.planner = planner
+        self.explore_noise = explore_noise
+        self.replay_buffer = replay_buffer
+        self.render = render
         self.episode_path = episode_path
-        self.args = args
-        self.env = gym.make(self.args.env)
 
-        self.env.env.configure(args)
-        self.env.env._render_width = 64
-        self.env.env._render_height = 64
+        self.env = env
 
-    def train(self) -> Batch:
-        print(f"args.render = {self.args.render}")
-        if self.args.render:
-            self.env.render(mode="human")
+        self.state = None
+        self.action_dim = self.action_space.shape.sum()
+
+    def reset(self) -> torch.Tensor:
         self.env.reset()
-        print(f"action space: {self.env.action_space.shape}")
-        episode_actions = []
-        episode_rewards = []
-        episodes = []
-        for _ in range(self.args.episodes):
-            seq_actions = []
-            rewards = []
-            sequence = []
-            for _ in range(self.args.steps):
-                action = self.env.action_space.sample()
-                seq_actions.append(action)
-                obs, reward, done, _ = self.env.step(action)
-                rewards.append(reward)
-                if self.args.rgb:
-                    rgb = self.env.render(mode="rgb_array")
-                    # print(f"RGB dims = {rgb.shape}")
-                    sequence.append(rgb)
-                if done:
-                    break
-                # print("{obs=}")
-                # print(f"{reward=}")
-                # print(f"{done=}")
-            episode_actions.append(torch.stack(list(map(torch.from_numpy, seq_actions))))
-            episode_rewards.append(torch.as_tensor(rewards))
-            episodes.append(torch.stack(list(map(torch.from_numpy, sequence))))
+        self.state = self.env.render(mode="rgb_array")
+        return self.state
 
-        return self.to_batch(episodes, episode_actions, episode_rewards)
+    @torch.no_grad()
+    def action(self, obs: torch.Tensor) -> torch.Tensor:
+        action_mean = self.planner(obs)
+        return Normal(action_mean, self.explore_noise).sample()
 
-    def to_batch(self, episodes: list[torch.Tensor], episode_actions: list[torch.Tensor],
-                 episode_rewards: list[torch.Tensor]) -> Batch:
-        path = self.episode_path
-        batch = Batch(episode_actions, episode_rewards, episodes)
-        torch.save(asdict(batch), path)
-        print(f"Batch saved to {path}")
-        return batch
+    def step(self):
+        action = self.action(self.state).numpy()
+        _, reward, done, _ = self.env.step(action)
+        self.state = self.env.render(mode="rgb_array")
+        self.replay_buffer.add_step_data(self.state, action, reward)
+        if done:
+            self.replay_buffer.stack_episode()
+
+    @property
+    def action_space(self):
+        return self.env.action_space
