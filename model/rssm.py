@@ -37,6 +37,9 @@ class RecurrentStateSpaceModel(nn.Module):
         self.fc_state_mean_posterior = nn.Linear(hidden_dim, state_dim)
         self.fc_state_std_dev_posterior = nn.Linear(hidden_dim, state_dim)
 
+        self.state_dim = state_dim
+        self.hidden_dim = hidden_dim
+
     def forward(self,
                 prev_state: Optional[torch.Tensor],
                 prev_action: torch.Tensor,
@@ -72,11 +75,7 @@ class RecurrentStateSpaceModel(nn.Module):
         """
         total_action_seq_length = prev_action.size(1)
         if prev_state is None:
-            batch_size = prev_action.size(0)
-            seq_length = prev_action.size(1)
-            action_dim = sum(prev_action.shape[2:])  # FIXME: make field variable in constructor
-            state_dim = self.fc_latent_state_action.in_features - action_dim
-            prev_state = torch.zeros(batch_size, seq_length, state_dim)
+            prev_state = torch.zeros(prev_action.size(0), prev_action.size(1), self.state_dim)
         input = torch.cat([prev_state, prev_action], dim=2)
 
         # Q: Padded tensor unpacked in linear layer?
