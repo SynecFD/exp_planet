@@ -30,3 +30,7 @@ class ActionRepeat(Wrapper):
             if done:
                 break
         return observe, total_reward, done, info
+
+    @property
+    def times(self):
+        return self._times
