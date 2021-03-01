@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Sequence
 
 import numpy as np
+import torch
 from torch import Tensor
 from torch.utils.data import RandomSampler
 from torch.utils.data._utils import collate
@@ -50,8 +51,6 @@ class ExperienceReplay:
         episode = self.replay[idx]
         seq_end = min(episode.states.shape[0], seq_start + length)
 
-        # FIXME: Add padding for collator or use custom collator with padding
-        #  (remove DEBUG logic from random sampler afterwards)
         states = episode.states[seq_start:seq_end]
         actions = episode.actions[seq_start:seq_end]
         rewards = episode.rewards[seq_start:seq_end]
@@ -76,23 +75,23 @@ class ExperienceReplay:
 
 class ExperienceReplaySampler(RandomSampler):
 
-    def __init__(self, buffer: Sequence, seq_length: int, generator=None) -> None:
+    def __init__(self, buffer: Sequence, seq_length: int, allow_padding: bool = True, generator=None) -> None:
         super().__init__(data_source=buffer, generator=generator)
         self.seq_length = seq_length
+        self.allow_padding = allow_padding
 
     def __iter__(self) -> tuple[int, int]:
         for idx in super().__iter__():
-            max_length = min(self.seq_length, self.data_source[idx].states.shape[0])
-            # seq_start = torch.randint(high=max_length - 1, size=(1,), dtype=torch.int64,
-            #                           generator=self.generator).item()
-            # yield idx, seq_start
-            # FIXME: should word while debugging assuming no episode is done before 200 steps
-            yield idx, 0
+            high = self.data_source[idx].states.shape[0]
+            if not self.allow_padding:
+                high -= self.seq_length
+            seq_start = torch.randint(high=high, size=(1,), dtype=torch.int64,
+                                      generator=self.generator).item()
+            yield idx, seq_start
 
 
 def experience_replay_collate(batch: list[tuple[Tensor, Tensor, Tensor]]):
     conversion = collate.default_convert(batch)
     pad_sequence_no_sort = partial(pad_sequence, enforce_sorted=False)
-    padded_batch = list(chain(*map(pad_sequence_no_sort, zip(*conversion))))
-    compression_mask = [1, 0] * (len(padded_batch) // 2 - 1) + [1, 1]
-    return list(compress(padded_batch, compression_mask))
+    padded_batch = chain(*map(pad_sequence_no_sort, zip(*conversion)))
+    return list(compress(padded_batch, [1, 0, 1, 0, 1, 1]))
