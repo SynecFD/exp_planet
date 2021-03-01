@@ -85,8 +85,7 @@ class ExperienceReplaySampler(RandomSampler):
             high = self.data_source[idx].states.shape[0]
             if not self.allow_padding:
                 high -= self.seq_length
-            seq_start = torch.randint(high=high, size=(1,), dtype=torch.int64,
-                                      generator=self.generator).item()
+            seq_start = torch.randint(high=high, size=(1,), dtype=torch.int64, generator=self.generator).item()
             yield idx, seq_start
 
 
