@@ -1,9 +1,12 @@
 import argparse
+from argparse import Namespace
 from collections import Iterable
 from itertools import chain
 from pathlib import Path
 
 import gym
+# noinspection PyUnresolvedReferences
+import pybullet_envs
 import pytorch_lightning as pl
 import torch
 from torch.nn import Parameter
@@ -61,16 +64,17 @@ class PlaNet(pl.LightningModule):
         self.episode_length = episode_length
 
         self.env, height, width = self._init_gym(env, action_rep)
-        self.action_dim = self.env.action_space.n  # FIXME: geht das?
+        self.action_dim = sum(self.env.action_space.shape)
         self.encoder = VariationalEncoder(height, width)
         self.transition_model = RecurrentStateSpaceModel(self.action_dim)
         self.decoder = ObservationModelDecoder(self.transition_model.state_dim, self.transition_model.hidden_dim,
                                                height, width)
         self.reward_model = RewardModel(self.transition_model.state_dim, self.transition_model.hidden_dim)
-        self.planner = PlanningAgent(self.vae, self.transition_model, self.reward_model, self.agent.action_space,
+        self.planner = PlanningAgent(self.encoder, self.transition_model, self.reward_model, self.env.action_space,
                                      self.hor_len, self.opt_iter, self.num_candidates, self.top_candidates)
         self.replay_buffer = ExperienceReplay(self.replay_cap)
         self.agent = Agent(self.planner, self.eps_noise, self.replay_buffer, self.save_path, self.env, self.render)
+        self.populate_memory(self.seed_epi, self.episode_length)
 
     @staticmethod
     def _init_gym(env: str, action_repeat: int) -> tuple[gym.Env, int, int]:
@@ -79,12 +83,27 @@ class PlaNet(pl.LightningModule):
         env.env._render_height = 64
         return ActionRepeat(env, action_repeat), env.env._render_height, env.env._render_width
 
+    def populate_memory(self, episodes: int = 5, length: int = 200) -> None:
+        if self.save_path.exists():
+            self.replay_buffer.load(self.save_path)
+        else:
+            self.agent.reset()
+            for _ in range(episodes):
+                for _ in range(length):
+                    action = self.env.action_space.sample()
+                    _, done = self.agent.step(action)
+                    if done:
+                        break
+                self.agent.reset()
+            # FIXME: DEBUG
+            self.replay_buffer.persist(self.save_path)
+
     def __dataloader(self) -> DataLoader:
         """Initialize the Replay Buffer dataset used for retrieving experiences"""
-        dataset = ReplayBufferSet(self.buffer, self.episode_length)
+        dataset = ReplayBufferSet(self.replay_buffer, self.seq_len)
         return DataLoader(dataset=dataset,
                           batch_size=self.batch_size,
-                          sampler=ExperienceReplaySampler(self.buffer, self.episode_length))
+                          sampler=ExperienceReplaySampler(self.replay_buffer.replay, self.seq_len))
 
     def train_dataloader(self):
         return self.__dataloader()
@@ -108,7 +127,7 @@ class PlaNet(pl.LightningModule):
         parser.add_argument("--env", type=str, default="HalfCheetahBulletEnv-v0", help="gym environment tag")
         parser.add_argument("--lr", type=float, default=1e-3, help="learning rate for Adam")
         parser.add_argument("--eps", type=float, default=1e-4, help="epsilon for Adam")
-        parser.add_argument("--save_path", type=Path, default=Path.cwd() / "data" / "episode.pt",
+        parser.add_argument("--save_path", type=Path, default=Path.cwd() / "data" / "episode.npz",
                             help="epsilon for Adam")
         parser.add_argument("--replay_cap", type=int, default=1000, help="capacity of the replay buffer")
         parser.add_argument("-B", "--batch_size", type=int, default=50, help="size of the batches")
@@ -133,3 +152,17 @@ class PlaNet(pl.LightningModule):
         parser.add_argument("--episode_length", type=int, default=200, help="max length of an episode")
 
         return parser
+
+
+def main(args: Namespace) -> None:
+    model = PlaNet(**vars(args))
+    trainer = pl.Trainer()
+    trainer.fit(model)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(add_help=False)
+    parser = PlaNet.add_model_specific_args(parser)
+    args = parser.parse_args()
+
+    main(args)
