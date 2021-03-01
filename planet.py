@@ -111,7 +111,8 @@ class PlaNet(pl.LightningModule):
     def forward(self, *args, **kwargs):
         pass
 
-    def training_step(self, *args, **kwargs):
+    def training_step(self, batch: list[torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int, *args, **kwargs):
+        states_batch, actions_batch, rewards_batch = batch
         pass
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
