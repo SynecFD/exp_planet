@@ -11,7 +11,7 @@ class VariationalEncoder(nn.Module):
                                  nn.Conv2d(64, 128, kernel_size=4, stride=2), activation_function(),
                                  nn.Conv2d(128, 256, kernel_size=4, stride=2), activation_function(),
                                  nn.Flatten())
-        self._latent_size = self.latent_size(height, width)
+        self._latent_size = self._latent_size(height, width)
 
     def forward(self, obs):
         return self.net.forward(obs)
@@ -30,5 +30,5 @@ class VariationalEncoder(nn.Module):
         return latent_dim_x * latent_dim_y * out_channels
 
     @property
-    def laten_size(self):
+    def latent_size(self) -> int:
         return self._latent_size
