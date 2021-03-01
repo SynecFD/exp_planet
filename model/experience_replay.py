@@ -1,9 +1,15 @@
 from collections import deque, namedtuple
+from functools import partial
+from itertools import chain, compress
 from pathlib import Path
 from typing import Sequence
 
 import numpy as np
+from torch import Tensor
 from torch.utils.data import RandomSampler
+from torch.utils.data._utils import collate
+
+from util import pad_sequence
 
 Experience = namedtuple('Experience', field_names=['states', 'actions', 'rewards'])
 
@@ -82,3 +88,11 @@ class ExperienceReplaySampler(RandomSampler):
             # yield idx, seq_start
             # FIXME: should word while debugging assuming no episode is done before 200 steps
             yield idx, 0
+
+
+def experience_replay_collate(batch: list[tuple[Tensor, Tensor, Tensor]]):
+    conversion = collate.default_convert(batch)
+    pad_sequence_no_sort = partial(pad_sequence, enforce_sorted=False)
+    padded_batch = list(chain(*map(pad_sequence_no_sort, zip(*conversion))))
+    compression_mask = [1, 0] * (len(padded_batch) // 2 - 1) + [1, 1]
+    return list(compress(padded_batch, compression_mask))

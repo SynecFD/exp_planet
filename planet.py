@@ -13,8 +13,8 @@ from torch.nn import Parameter
 from torch.utils.data import DataLoader
 
 from agent import Agent, PlanningAgent
-from model import RecurrentStateSpaceModel, VariationalEncoder, ObservationModelDecoder, RewardModel, ExperienceReplay
-from model.experience_replay import ExperienceReplaySampler
+from model import RecurrentStateSpaceModel, VariationalEncoder, ObservationModelDecoder, RewardModel, ExperienceReplay, \
+    ExperienceReplaySampler, experience_replay_collate
 from util import ActionRepeat
 from util.data_loader import ReplayBufferSet
 
@@ -103,6 +103,7 @@ class PlaNet(pl.LightningModule):
         dataset = ReplayBufferSet(self.replay_buffer, self.seq_len)
         return DataLoader(dataset=dataset,
                           batch_size=self.batch_size,
+                          collate_fn=experience_replay_collate,
                           sampler=ExperienceReplaySampler(self.replay_buffer.replay, self.seq_len))
 
     def train_dataloader(self):
@@ -111,8 +112,9 @@ class PlaNet(pl.LightningModule):
     def forward(self, *args, **kwargs):
         pass
 
-    def training_step(self, batch: list[torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int, *args, **kwargs):
-        states_batch, actions_batch, rewards_batch = batch
+    def training_step(self, batch: list[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int, *args,
+                      **kwargs):
+        states_batch, actions_batch, rewards_batch, length = batch
         pass
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
