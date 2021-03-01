@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Sequence
 
 import numpy as np
-import torch
 from torch.utils.data import RandomSampler
 
 Experience = namedtuple('Experience', field_names=['states', 'actions', 'rewards'])
@@ -29,6 +28,8 @@ class ExperienceReplay:
         self.current_reward_buffer.append(reward)
 
     def stack_episode(self) -> None:
+        if not self.current_frame_buffer and not self.current_action_buffer and not self.current_reward_buffer:
+            return
         states = np.stack(self.current_frame_buffer)
         actions = np.stack(self.current_action_buffer)
         rewards = np.array(self.current_reward_buffer)
@@ -39,26 +40,24 @@ class ExperienceReplay:
         self.current_reward_buffer.clear()
 
     def get_sample(self, idx: int, seq_start: int, length: int) \
-            -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
-        state_list, action_list, reward_list = [], [], []
+            -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         episode = self.replay[idx]
-        assert seq_start + length <= episode.shape[0]
+        seq_end = min(episode.states.shape[0], seq_start + length)
 
-        states = episode.states[seq_start:(length + seq_start)]
-        actions = episode.actions[seq_start:(length + seq_start)]
-        rewards = episode.rewards[seq_start:(length + seq_start)]
-        state_list.append(states)
-        action_list.append(actions)
-        reward_list.append(rewards)
+        # FIXME: Add padding for collator or use custom collator with padding
+        #  (remove DEBUG logic from random sampler afterwards)
+        states = episode.states[seq_start:seq_end]
+        actions = episode.actions[seq_start:seq_end]
+        rewards = episode.rewards[seq_start:seq_end]
 
-        return state_list, action_list, reward_list
+        return states, actions, rewards
 
     def persist(self, path: Path) -> None:
         if path.suffix is not None and path.suffix != ".npz":
             raise ValueError("ExperienceReplay save-path must end on .npz or have no file extension")
         path.parent.mkdir(exist_ok=True)
         episodes, actions, rewards = list(zip(*self.replay))
-        np.savez_compressed(path, episode=episodes, actions=actions, rewards=rewards)
+        np.savez_compressed(path, episodes=episodes, actions=actions, rewards=rewards)
 
     def load(self, path: Path):
         if not path.exists():
@@ -78,6 +77,8 @@ class ExperienceReplaySampler(RandomSampler):
     def __iter__(self) -> tuple[int, int]:
         for idx in super().__iter__():
             max_length = min(self.seq_length, self.data_source[idx].states.shape[0])
-            seq_start = torch.randint(high=max_length - 1, size=(1,), dtype=torch.int64,
-                                      generator=self.generator).item()
-            yield idx, seq_start
+            # seq_start = torch.randint(high=max_length - 1, size=(1,), dtype=torch.int64,
+            #                           generator=self.generator).item()
+            # yield idx, seq_start
+            # FIXME: should word while debugging assuming no episode is done before 200 steps
+            yield idx, 0
