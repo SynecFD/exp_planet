@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 
 from agent import Agent, PlanningAgent
 from model import RecurrentStateSpaceModel, VariationalEncoder, ObservationModelDecoder, RewardModel, ExperienceReplay
+from model.experience_replay import ExperienceReplaySampler
 from util import ActionRepeat
 from util.data_loader import ReplayBufferSet
 
@@ -83,7 +84,7 @@ class PlaNet(pl.LightningModule):
         dataset = ReplayBufferSet(self.buffer, self.episode_length)
         return DataLoader(dataset=dataset,
                           batch_size=self.batch_size,
-                          sampler=None)
+                          sampler=ExperienceReplaySampler(self.buffer, self.episode_length))
 
     def train_dataloader(self):
         return self.__dataloader()

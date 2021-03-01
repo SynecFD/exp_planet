@@ -1,43 +1,23 @@
 import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
-from torch.utils.data.dataset import IterableDataset, T_co
+from torch.utils.data.dataset import Dataset
+
 from model.experience_replay import ExperienceReplay
 
 
-class ReplayLoader(nn.Module):
+class ReplayBufferSet(Dataset):
 
-    def __init__(self, buffer: ExperienceReplay, episode_length: int, batch_size: int) -> None:
-        self.buffer = buffer
-        self.episode_length = episode_length
-        self.batch_size = batch_size
-
-    def __dataloader(self) -> DataLoader:
-        """Initialize the Replay Buffer dataset used for retrieving experiences"""
-        dataset = ReplayBufferSet(self.buffer, self.episode_length)
-        dataloader = DataLoader(
-            dataset=dataset,
-            batch_size=self.batch_size,
-            sampler=None,
-        )
-        return dataloader
-
-    def get_dataloader(self) -> DataLoader:
-        return self.__dataloader()
-
-
-class ReplayBufferSet(IterableDataset):
-
-    def __init__(self, buffer: ExperienceReplay, sample_size: int) -> None:
+    def __init__(self, buffer: ExperienceReplay, seq_length: int) -> None:
         """
         Args:
             buffer: replay buffer
             sample_size: number of experiences to sample at a time
         """
+        super().__init__()
         self.buffer = buffer
-        self.sample_size = sample_size
+        self.seq_length = seq_length
 
-    def __iter__(self) -> tuple[torch.tensor, torch.tensor, torch.tensor]:
-        states, actions, rewards = self.buffer.sample(self.sample_size)
-        for i in range(len(states)):
-            yield states[i], actions[i], rewards[i]
+    def __getitem__(self, index: tuple[int, int]) -> tuple[torch.tensor, torch.tensor, torch.tensor]:
+        return self.buffer.get_sample(*index, self.seq_length)
+
+    def __len__(self) -> int:
+        return len(self.buffer)
