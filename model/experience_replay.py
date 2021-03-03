@@ -46,8 +46,7 @@ class ExperienceReplay:
         self.current_action_buffer.clear()
         self.current_reward_buffer.clear()
 
-    def get_sample(self, idx: int, seq_start: int, length: int) \
-            -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def get_sample(self, idx: int, seq_start: int, length: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         episode = self.replay[idx]
         seq_end = min(episode.states.shape[0], seq_start + length)
 
@@ -64,7 +63,7 @@ class ExperienceReplay:
         episodes, actions, rewards = list(zip(*self.replay))
         np.savez_compressed(path, episodes=episodes, actions=actions, rewards=rewards)
 
-    def load(self, path: Path):
+    def load(self, path: Path) -> None:
         if not path.exists():
             raise FileNotFoundError("Invalid path to persisted ExperienceReplay")
         dict = np.load(path, allow_pickle=False, fix_imports=False)
