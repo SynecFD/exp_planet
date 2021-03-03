@@ -25,11 +25,11 @@ class ActionRepeat(Wrapper):
         total_reward = 0
 
         for _ in range(self._times):
-            observe, reward, done, info = super().step(action)
+            state, reward, done, info = super().step(action)
             total_reward += reward
             if done:
                 break
-        return observe, total_reward, done, info
+        return state, total_reward, done, info
 
     @property
     def times(self):
