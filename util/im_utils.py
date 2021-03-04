@@ -9,6 +9,8 @@ def preprocess_observation_(observation: Tensor, bit_depth: int = 5) -> Tensor:
     In addition, adds uniform random noise to the image
     """
     assert observation.shape[-3:] == (64, 64, 3), 'Input obs of wrong shape'
+    assert observation.dtype != float32 \
+           or (observation.min() >= 0.0 and observation.max() > 0.5), "Obs has already been processed"
     observation = observation.to(dtype=float32, copy=True)
     observation.floor_divide_(2 ** (8 - bit_depth)).div_(2 ** bit_depth).sub_(0.5)
     observation.add_(rand_like(observation).div_(2 ** bit_depth))
