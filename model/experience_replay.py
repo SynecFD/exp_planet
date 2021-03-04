@@ -2,7 +2,7 @@ from collections import deque, namedtuple
 from functools import partial
 from itertools import chain, compress
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, Optional
 
 import numpy as np
 import torch
@@ -74,8 +74,9 @@ class ExperienceReplay:
 
 class ExperienceReplaySampler(RandomSampler):
 
-    def __init__(self, buffer: Sequence, seq_length: int, allow_padding: bool = True, generator=None) -> None:
-        super().__init__(data_source=buffer, generator=generator)
+    def __init__(self, buffer: Sequence, seq_length: int, allow_padding: bool = True, replacement: bool = False,
+                 num_samples: Optional[int] = None, generator: Optional[torch.Generator] = None) -> None:
+        super().__init__(data_source=buffer, replacement=replacement, num_samples=num_samples, generator=generator)
         self.seq_length = seq_length
         self.allow_padding = allow_padding
 
