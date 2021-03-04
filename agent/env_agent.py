@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
@@ -9,13 +8,7 @@ from torch.distributions import Normal
 
 from agent import PlanningAgent
 from model import ExperienceReplay
-
-
-@dataclass
-class Batch:
-    episode_actions: list[torch.Tensor]
-    rewards: list[torch.Tensor]
-    episodes: list[torch.Tensor]
+from util import preprocess_observation_
 
 
 class Agent:
