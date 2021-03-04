@@ -10,6 +10,7 @@ import gym
 import pybullet_envs
 import pytorch_lightning as pl
 import torch
+from torch.distributions import Normal
 from torch.nn import Parameter
 from torch.utils.data import DataLoader
 
@@ -123,8 +124,11 @@ class PlaNet(pl.LightningModule):
     def train_dataloader(self):
         return self.__dataloader()
 
-    def forward(self, *args, **kwargs):
-        pass
+    def forward(self,
+                cur_belief: torch.Tensor, actions: torch.Tensor, lengths: torch.Tensor, recurrent_state: torch.Tensor,
+                latent_obs: torch.Tensor, *args, **kwargs
+                ) -> tuple[Normal, Normal, torch.Tensor, torch.Tensor]:
+        return self.rssm(cur_belief, actions, lengths, self.recurrent_state, latent_obs)
 
     def training_step(self, batch: list[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int,
                       *args, **kwargs) -> torch.Tensor:
@@ -133,7 +137,7 @@ class PlaNet(pl.LightningModule):
         obs_batch = preprocess_observation_(obs_batch)
         latent_obs = self.encoder(obs_batch)
 
-        recurrent_step = self.rssm(self.belief, actions_batch, length, self.last_recurrent_state, latent_obs)
+        recurrent_step = self(self.belief, actions_batch, length, self.last_recurrent_state, latent_obs)
         prior_belief, posterior_belief, self.recurrent_states, self.last_recurrent_state = recurrent_step
         self.belief = posterior_belief.rsample()
 
