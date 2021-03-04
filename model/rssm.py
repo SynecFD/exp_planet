@@ -44,7 +44,7 @@ class RecurrentStateSpaceModel(nn.Module):
                 prev_state: Optional[torch.Tensor],
                 prev_action: torch.Tensor,
                 action_lengths: torch.Tensor,
-                recurrent_hidden_states: Optional[torch.Tensor],
+                recurrent_hidden_state: Optional[torch.Tensor],
                 latent_observation: torch.Tensor,
                 ) -> tuple[Normal, Normal, torch.Tensor, torch.Tensor]:
         """Compute environment state prior & state filtering posterior
@@ -56,17 +56,15 @@ class RecurrentStateSpaceModel(nn.Module):
         # FIXME: https://pytorch.org/docs/stable/notes/faq.html#pack-rnn-unpack-with-data-parallelism
         state_prior, recurrent_hidden_states, next_recurrent_hidden_state = self._prior(prev_state, prev_action,
                                                                                         action_lengths,
-                                                                                        recurrent_hidden_states)
+                                                                                        recurrent_hidden_state)
         state_posterior = self._posterior(recurrent_hidden_states, latent_observation)
-        print(f"prior size: {state_prior.sample().shape}")
-        print(f"posterior size: {state_posterior.sample().shape}")
         return state_prior, state_posterior, recurrent_hidden_states, next_recurrent_hidden_state
 
     def _prior(self,
                prev_state: Optional[torch.Tensor],
                prev_action: torch.Tensor,
                action_lengths: torch.Tensor,
-               recurrent_hidden_states: Optional[torch.Tensor]
+               recurrent_hidden_state: Optional[torch.Tensor]
                ) -> tuple[Normal, torch.Tensor, torch.Tensor]:
         """Compute environment state prior
 
@@ -87,7 +85,7 @@ class RecurrentStateSpaceModel(nn.Module):
             hidden_state = pack_padded_sequence(hidden_state, action_lengths, batch_first=True, enforce_sorted=False)
 
         # output is: (recurrent_hidden_state, last_recurrent_hidden_state)
-        recurrent_hidden_states, next_recurrent_hidden_state = self.rnn(hidden_state, recurrent_hidden_states)
+        recurrent_hidden_states, next_recurrent_hidden_state = self.rnn(hidden_state, recurrent_hidden_state)
 
         if isinstance(recurrent_hidden_states, PackedSequence):
             recurrent_hidden_states, _ = pad_packed_sequence(recurrent_hidden_states, batch_first=True,
@@ -102,12 +100,12 @@ class RecurrentStateSpaceModel(nn.Module):
         # A: KL Div is the same not matter the parameterization dimensions
         return Normal(loc=mean, scale=std_dev), recurrent_hidden_states, next_recurrent_hidden_state
 
-    def _posterior(self, recurrent_hidden_state, latent_observation) -> Normal:
+    def _posterior(self, recurrent_hidden_states: torch.Tensor, latent_observation: torch.Tensor) -> Normal:
         """Compute environment state filtering posterior
 
         q(s_t | h_t, o_t)
         """
-        input = torch.cat([recurrent_hidden_state, latent_observation], dim=2)
+        input = torch.cat([recurrent_hidden_states, latent_observation], dim=2)
         hidden_state = self.activation_func(self.fc_hidden_latent_observation(input))
 
         # Kai Arulkumaran unifies the following independent linear layers into one
