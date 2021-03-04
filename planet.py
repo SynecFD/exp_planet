@@ -2,6 +2,7 @@ import argparse
 from argparse import Namespace
 from collections import Iterable
 from itertools import chain
+from math import ceil
 from pathlib import Path
 
 import gym
@@ -14,8 +15,8 @@ from torch.utils.data import DataLoader
 
 from agent import Agent, PlanningAgent
 from model import RecurrentStateSpaceModel, VariationalEncoder, ObservationModelDecoder, RewardModel, ExperienceReplay, \
-    ExperienceReplaySampler, experience_replay_collate
-from util import ActionRepeat
+    ExperienceReplaySampler, experience_replay_collate, loss
+from util import ActionRepeat, preprocess_observation_
 from util.data_loader import ReplayBufferSet
 
 
@@ -24,7 +25,7 @@ class PlaNet(pl.LightningModule):
     def __init__(self,
                  env: str,
                  lr: float,
-                 eps: float,
+                 epsi: float,
                  save_path: Path,
                  replay_cap: int,
                  batch_size: int,
@@ -37,15 +38,15 @@ class PlaNet(pl.LightningModule):
                  top_candidates: int,
                  seed_epi: int,
                  update_interval: int,
-                 eps_noise: float,
+                 epsi_noise: float,
                  action_rep: int,
                  render: bool,
                  replay_size: int,
-                 episode_length: int,
+                 episode_max_len: int,
                  **kwargs) -> None:
         super().__init__(**kwargs)
         self.lr = lr
-        self.eps = eps
+        self.epsi = epsi
         self.save_path = save_path
         self.replay_cap = replay_cap
         self.batch_size = batch_size
@@ -58,23 +59,35 @@ class PlaNet(pl.LightningModule):
         self.top_candidates = top_candidates
         self.seed_epi = seed_epi
         self.update_interval = update_interval
-        self.eps_noise = eps_noise
+        self.epsi_noise = epsi_noise
         self.render = render
         self.replay_size = replay_size
-        self.episode_length = episode_length
+        self.episode_max_len = ceil(episode_max_len / action_rep)
 
         self.env, height, width = self._init_gym(env, action_rep)
         self.action_dim = sum(self.env.action_space.shape)
+
+        # Nets
         self.encoder = VariationalEncoder(height, width)
-        self.transition_model = RecurrentStateSpaceModel(self.action_dim)
-        self.decoder = ObservationModelDecoder(self.transition_model.state_dim, self.transition_model.hidden_dim,
+        self.rssm = RecurrentStateSpaceModel(self.action_dim)
+        self.decoder = ObservationModelDecoder(self.rssm.state_dim, self.rssm.hidden_dim,
                                                height, width)
-        self.reward_model = RewardModel(self.transition_model.state_dim, self.transition_model.hidden_dim)
-        self.planner = PlanningAgent(self.encoder, self.transition_model, self.reward_model, self.env.action_space,
+        self.reward_model = RewardModel(self.rssm.state_dim, self.rssm.hidden_dim)
+
+        # Model states
+        self.belief = None
+        self.recurrent_states = None
+        self.last_recurrent_state = None
+
+        # Planner
+        self.planner = PlanningAgent(self.encoder, self.rssm, self.reward_model, self.env.action_space,
                                      self.hor_len, self.opt_iter, self.num_candidates, self.top_candidates)
+
+        # Environment interaction
         self.replay_buffer = ExperienceReplay(self.replay_cap)
-        self.agent = Agent(self.planner, self.eps_noise, self.replay_buffer, self.save_path, self.env, self.render)
-        self.populate_memory(self.seed_epi, self.episode_length)
+        self.agent = Agent(self.planner, self.epsi_noise, self.replay_buffer, self.save_path, self.env, self.render)
+        self.agent.reset()
+        self.populate_memory(self.seed_epi, self.episode_max_len)
 
     @staticmethod
     def _init_gym(env: str, action_repeat: int) -> tuple[gym.Env, int, int]:
@@ -87,11 +100,10 @@ class PlaNet(pl.LightningModule):
         if self.save_path.exists():
             self.replay_buffer.load(self.save_path)
         else:
-            self.agent.reset()
             for _ in range(episodes):
                 for _ in range(length):
                     action = self.env.action_space.sample()
-                    _, done = self.agent.step(action)
+                    _, _, done = self.agent.step(action)
                     if done:
                         break
                 self.agent.reset()
@@ -104,7 +116,9 @@ class PlaNet(pl.LightningModule):
         return DataLoader(dataset=dataset,
                           batch_size=self.batch_size,
                           collate_fn=experience_replay_collate,
-                          sampler=ExperienceReplaySampler(self.replay_buffer.replay, self.seq_len))
+                          sampler=ExperienceReplaySampler(self.replay_buffer.replay, self.seq_len, allow_padding=True,
+                                                          replacement=True,
+                                                          num_samples=self.update_interval * self.batch_size))
 
     def train_dataloader(self):
         return self.__dataloader()
@@ -112,47 +126,65 @@ class PlaNet(pl.LightningModule):
     def forward(self, *args, **kwargs):
         pass
 
-    def training_step(self, batch: list[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int, *args,
-                      **kwargs):
-        states_batch, actions_batch, rewards_batch, length = batch
-        pass
+    def training_step(self, batch: list[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int,
+                      *args, **kwargs) -> torch.Tensor:
+        obs_batch, actions_batch, rewards_batch, length = batch
+
+        obs_batch = preprocess_observation_(obs_batch)
+        latent_obs = self.encoder(obs_batch)
+
+        recurrent_step = self.rssm(self.belief, actions_batch, length, self.last_recurrent_state, latent_obs)
+        prior_belief, posterior_belief, self.recurrent_states, self.last_recurrent_state = recurrent_step
+        self.belief = posterior_belief.rsample()
+
+        expected_reward = self.reward_model(self.belief, self.recurrent_states)
+        reconstructed_obs = self.decoder(self.belief, self.recurrent_states)
+
+        return loss(prior_belief, posterior_belief, obs_batch, reconstructed_obs, rewards_batch, expected_reward,
+                    length, self.free_nats)
+
+    def training_epoch_end(self, training_step_outputs):
+        # Data collection
+        for _ in range(self.episode_max_length):
+            self.agent.step()
+        self.agent.reset()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        return torch.optim.Adam(self._get_params(), lr=self.lr, eps=self.eps)
+        return torch.optim.Adam(self._get_params(), lr=self.lr, eps=self.epsi)
 
     def _get_params(self) -> Iterable[Parameter]:
         return chain.from_iterable([self.encoder.parameters(), self.decoder.parameters(),
-                                    self.transition_model.parameters(), self.reward_model.parameters()])
+                                    self.rssm.parameters(), self.reward_model.parameters()])
 
     @staticmethod
     def add_model_specific_args(parent_parser):  # pragma: no-cover
         parser = argparse.ArgumentParser(parents=[parent_parser])
         parser.add_argument("--env", type=str, default="HalfCheetahBulletEnv-v0", help="gym environment tag")
         parser.add_argument("--lr", type=float, default=1e-3, help="learning rate for Adam")
-        parser.add_argument("--eps", type=float, default=1e-4, help="epsilon for Adam")
-        parser.add_argument("--save_path", type=Path, default=Path.cwd() / "data" / "episode.npz",
+        parser.add_argument("--epsi", type=float, default=1e-4, help="epsilon for Adam")
+        parser.add_argument("--save-path", type=Path, default=Path.cwd() / "data" / "episode.npz",
                             help="epsilon for Adam")
-        parser.add_argument("--replay_cap", type=int, default=1000, help="capacity of the replay buffer")
-        parser.add_argument("-B", "--batch_size", type=int, default=50, help="size of the batches")
-        parser.add_argument("-L", "--seq_len", type=int, default=50, help="length of sequence chunks")
-        parser.add_argument("--grad_clip", type=int, default=1000, help="gradient clipping norm")
-        parser.add_argument("--free_nats", type=int, default=3, help="clipping the divergence loss below this value")
+        parser.add_argument("--replay-cap", type=int, default=1000, help="capacity of the replay buffer")
+        parser.add_argument("-B", "--batch-size", type=int, default=50, help="size of the batches")
+        parser.add_argument("-L", "--seq-len", type=int, default=50, help="length of sequence chunks")
+        parser.add_argument("--grad-clip", type=int, default=1000, help="gradient clipping norm")
+        parser.add_argument("--free-nats", type=int, default=3, help="clipping the divergence loss below this value")
 
-        parser.add_argument("-H", "--hor_len", type=int, default=12, help="horizon length for CEM")
-        parser.add_argument("-I", "--opt_iter", type=int, default=10, help="optimization iterations for CEM")
-        parser.add_argument("-J", "--num_candidates", type=int, default=1000,
+        parser.add_argument("-H", "--hor-len", type=int, default=12, help="horizon length for CEM")
+        parser.add_argument("-I", "--opt-iter", type=int, default=10, help="optimization iterations for CEM")
+        parser.add_argument("-J", "--num-candidates", type=int, default=1000,
                             help="number of candidate samples for CEM")
-        parser.add_argument("-K", "--top_candidates", type=int, default=100,
+        parser.add_argument("-K", "--top-candidates", type=int, default=100,
                             help="number of top candidate samples for refitting CEM")
-        parser.add_argument("-S", "--seed_epi", type=int, default=5, help="number of random seed episodes")
-        parser.add_argument("-C", "--update_interval", type=int, default=100,
+        parser.add_argument("-S", "--seed-epi", type=int, default=5, help="number of random seed episodes")
+        parser.add_argument("-C", "--update-interval", type=int, default=100,
                             help="number of update steps before episode collection")
-        parser.add_argument("--eps_noise", type=float, default=0.3, help="std dev of exploration noise")
-        parser.add_argument("--action_rep", type=int, default=4, help="Action repeats for the environment")
+        parser.add_argument("--epsi-noise", type=float, default=0.3, help="std dev of exploration noise")
+        parser.add_argument("--action-rep", type=int, default=4, help="Action repeats for the environment")
+        parser.add_argument("--episode-max-len", type=int, default=1000, help="Max episode length")
 
         parser.add_argument("--render", type=bool, default=False, help="display the environment")
         parser.add_argument("--replay_size", type=int, default=1000, help="capacity of the replay buffer")
-        parser.add_argument("--episode_length", type=int, default=200, help="max length of an episode")
 
         return parser
 
