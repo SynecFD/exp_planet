@@ -3,6 +3,7 @@ from argparse import Namespace
 from collections import Iterable
 from itertools import chain
 from math import ceil
+from os import cpu_count
 from pathlib import Path
 
 import gym
@@ -118,9 +119,11 @@ class PlaNet(pl.LightningModule):
         return DataLoader(dataset=dataset,
                           batch_size=self.batch_size,
                           collate_fn=experience_replay_collate,
-                          sampler=ExperienceReplaySampler(self.replay_buffer.replay, self.seq_len, allow_padding=True,
+                          sampler=ExperienceReplaySampler(self.replay_buffer.replay, self.seq_len, allow_padding=False,
                                                           replacement=True,
-                                                          num_samples=self.update_interval * self.batch_size))
+                                                          num_samples=self.update_interval * self.batch_size),
+                          num_workers=cpu_count() or 1,
+                          pin_memory=True)
 
     def train_dataloader(self):
         return self.__dataloader()
@@ -218,7 +221,7 @@ class PlaNet(pl.LightningModule):
 
 def main(args: Namespace) -> None:
     model = PlaNet(**vars(args))
-    trainer = pl.Trainer()
+    trainer = pl.Trainer(gpus=1)
     trainer.fit(model)
 
 
