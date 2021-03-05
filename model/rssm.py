@@ -73,7 +73,8 @@ class RecurrentStateSpaceModel(nn.Module):
         """
         total_action_seq_length = prev_action.size(1)
         if prev_state is None:
-            prev_state = torch.zeros(prev_action.size(0), prev_action.size(1), self.state_dim)
+            prev_state = torch.zeros(prev_action.size(0), prev_action.size(1), self.state_dim, dtype=prev_action.dtype,
+                                     device=prev_action.device)
         input = torch.cat([prev_state, prev_action], dim=2)
 
         # Q: Padded tensor unpacked in linear layer?
@@ -81,7 +82,8 @@ class RecurrentStateSpaceModel(nn.Module):
         hidden_state = self.activation_func(self.fc_latent_state_action(input))
 
         # Start of recurrent layer (GRU)
-        if not all_equal(action_lengths) or (action_lengths != prev_action.size(1)).any():
+        if (action_lengths != total_action_seq_length).any():
+            action_lengths = action_lengths.cpu()
             hidden_state = pack_padded_sequence(hidden_state, action_lengths, batch_first=True, enforce_sorted=False)
 
         # output is: (recurrent_hidden_state, last_recurrent_hidden_state)

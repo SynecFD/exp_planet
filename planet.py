@@ -129,13 +129,15 @@ class PlaNet(pl.LightningModule):
                 cur_belief: torch.Tensor, actions: torch.Tensor, lengths: torch.Tensor, recurrent_state: torch.Tensor,
                 latent_obs: torch.Tensor, *args, **kwargs
                 ) -> tuple[Normal, Normal, torch.Tensor, torch.Tensor]:
-        return self.rssm(cur_belief, actions, lengths, self.recurrent_state, latent_obs)
+        return self.rssm(cur_belief, actions, lengths, recurrent_state, latent_obs)
 
-    def training_step(self, batch: list[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int,
-                      *args, **kwargs) -> torch.Tensor:
+    def training_step(self, batch: list[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+                      batch_idx: int, *args, **kwargs) -> torch.Tensor:
         obs_batch, actions_batch, rewards_batch, length = batch
-
-        obs_batch = preprocess_observation_(obs_batch)
+        # self.belief = self.belief.detach() if self.belief is not None else self.belief
+        # self.last_recurrent_state = self.last_recurrent_state.detach() if self.last_recurrent_state is not None else self.last_recurrent_state
+        self.belief = None
+        self.last_recurrent_state = None
         latent_obs = self.encoder(obs_batch)
 
         recurrent_step = self(self.belief, actions_batch, length, self.last_recurrent_state, latent_obs)

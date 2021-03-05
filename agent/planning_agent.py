@@ -1,10 +1,11 @@
+from typing import Optional
+
 import torch
 from gym import Space
 from torch import Tensor
 from torch.distributions import Normal
 
 from model import RewardModel, RecurrentStateSpaceModel, VariationalEncoder
-from util import preprocess_observation_
 
 
 class PlanningAgent:
@@ -53,10 +54,8 @@ class PlanningAgent:
                                                                                     self.init_action_len, None,
                                                                                     latent_observation)
         posterior_sample = posterior_belief.sample((self.num_candidates, self.planning_horizon)).squeeze_()
-        next_recurrent_hidden_state = next_recurrent_hidden_state.expand(1, self.num_candidates, -1)
+        next_recurrent_hidden_state = next_recurrent_hidden_state.repeat(1, self.num_candidates, 1)
 
-        # DEBUG
-        print(f"Planning on device: {device}")
         action_belief = Normal(torch.zeros(self.planning_horizon, *self.action_space.shape, device=device),
                                torch.ones(self.planning_horizon, *self.action_space.shape, device=device))
         for _ in range(self.num_opt_iterations):

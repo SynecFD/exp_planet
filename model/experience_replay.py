@@ -93,4 +93,5 @@ def experience_replay_collate(batch: list[tuple[Tensor, Tensor, Tensor]]) -> lis
     conversion = collate.default_convert(batch)
     pad_sequence_no_sort = partial(pad_sequence, enforce_sorted=False)
     padded_batch = chain(*map(pad_sequence_no_sort, zip(*conversion)))
-    return list(compress(padded_batch, [1, 0, 1, 0, 1, 1]))
+    obs, actions, rewards, length = compress(padded_batch, [1, 0, 1, 0, 1, 1])
+    return [obs, actions.float(), rewards.float(), length]
