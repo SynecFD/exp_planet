@@ -17,8 +17,8 @@ from torch.utils.data import DataLoader
 
 from agent import Agent, PlanningAgent
 from model import RecurrentStateSpaceModel, VariationalEncoder, ObservationModelDecoder, RewardModel, ExperienceReplay, \
-    ExperienceReplaySampler, experience_replay_collate, loss
-from util import ActionRepeat, preprocess_observation_
+    ExperienceReplaySampler, experience_replay_collate
+from util import ActionRepeat
 from util.data_loader import ReplayBufferSet
 
 
@@ -145,13 +145,13 @@ class PlaNet(pl.LightningModule):
         expected_reward = self.reward_model(self.belief, self.recurrent_states)
         reconstructed_obs = self.decoder(self.belief, self.recurrent_states)
 
-        return loss(prior_belief, posterior_belief, obs_batch, reconstructed_obs, rewards_batch, expected_reward,
-                    length, self.free_nats)
+        return self.single_step_loss(prior_belief, posterior_belief, obs_batch, reconstructed_obs, rewards_batch,
+                                     expected_reward, length, self.free_nats)
 
     def training_epoch_end(self, training_step_outputs):
         # Data collection
-        for _ in range(self.episode_max_length):
-            self.agent.step()
+        for _ in range(self.episode_max_len):
+            self.agent.step(device=self.device)
         self.agent.reset()
 
     def single_step_loss(self, prior: Normal,
@@ -187,7 +187,7 @@ class PlaNet(pl.LightningModule):
         parser.add_argument("--env", type=str, default="HalfCheetahBulletEnv-v0", help="gym environment tag")
         parser.add_argument("--lr", type=float, default=1e-3, help="learning rate for Adam")
         parser.add_argument("--epsi", type=float, default=1e-4, help="epsilon for Adam")
-        parser.add_argument("--save-path", type=Path, default=Path.cwd() / "data" / "episode.npz",
+        parser.add_argument("--save-path", type=Path, default=Path.cwd() / "data" / "episode",
                             help="epsilon for Adam")
         parser.add_argument("--replay-cap", type=int, default=1000, help="capacity of the replay buffer")
         parser.add_argument("-B", "--batch-size", type=int, default=50, help="size of the batches")

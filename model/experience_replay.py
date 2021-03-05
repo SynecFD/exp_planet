@@ -29,45 +29,45 @@ class ExperienceReplay:
     def append(self, experience: Experience) -> None:
         self.replay.append(experience)
 
-    def add_step_data(self, state: np.ndarray, action: np.ndarray, reward: float) -> None:
+    def add_step_data(self, state: Tensor, action: np.ndarray, reward: float) -> None:
         self.current_frame_buffer.append(state)
         self.current_action_buffer.append(action)
         self.current_reward_buffer.append(reward)
 
     def stack_episode(self) -> None:
-        if not self.current_frame_buffer and not self.current_action_buffer and not self.current_reward_buffer:
-            return
-        states = np.stack(self.current_frame_buffer)
-        actions = np.stack(self.current_action_buffer)
-        rewards = np.array(self.current_reward_buffer)
-        self.append(Experience(states, actions, rewards))
+        if len(self.current_frame_buffer) > 1 and len(self.current_action_buffer) > 1 \
+                and len(self.current_reward_buffer) > 1:
+            states = torch.stack(self.current_frame_buffer)
+            actions = np.stack(self.current_action_buffer)
+            rewards = np.array(self.current_reward_buffer)
+            self.append(Experience(states, actions, rewards))
         # reset buffer for new episode
         self.current_frame_buffer.clear()
         self.current_action_buffer.clear()
         self.current_reward_buffer.clear()
 
-    def get_sample(self, idx: int, seq_start: int, length: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def get_sample(self, idx: int, seq_start: int, length: int) -> tuple[Tensor, np.ndarray, np.ndarray]:
         episode = self.replay[idx]
-        seq_end = min(episode.states.shape[0], seq_start + length)
+        seq_end = min(episode.states.size(0), seq_start + length)
 
-        states = episode.states[seq_start:seq_end]
+        states = episode.states.narrow(0, seq_start, min(length, episode.states.size(0) - seq_start))
         actions = episode.actions[seq_start:seq_end]
         rewards = episode.rewards[seq_start:seq_end]
 
         return states, actions, rewards
 
     def persist(self, path: Path) -> None:
-        if path.suffix is not None and path.suffix != ".npz":
-            raise ValueError("ExperienceReplay save-path must end on .npz or have no file extension")
+
         path.parent.mkdir(exist_ok=True)
         episodes, actions, rewards = list(zip(*self.replay))
-        np.savez_compressed(path, episodes=episodes, actions=actions, rewards=rewards)
+        np.savez_compressed(path.with_suffix(".npz"), actions=actions, rewards=rewards)
+        torch.save(episodes, path.with_suffix(".pt"))
 
     def load(self, path: Path) -> None:
         if not path.exists():
             raise FileNotFoundError("Invalid path to persisted ExperienceReplay")
-        dict = np.load(path, allow_pickle=False, fix_imports=False)
-        states = dict["episodes"], dict["actions"], dict["rewards"]
+        dict = np.load(path.with_suffix(".npz"), allow_pickle=False, fix_imports=False)
+        states = torch.load(path.with_suffix(".pt")), dict["actions"], dict["rewards"]
         exp_rpl = list(map(lambda state: Experience(*state), zip(*states)))
         self.replay.extend(exp_rpl)
 
@@ -89,7 +89,7 @@ class ExperienceReplaySampler(RandomSampler):
             yield idx, seq_start
 
 
-def experience_replay_collate(batch: list[tuple[Tensor, Tensor, Tensor]]):
+def experience_replay_collate(batch: list[tuple[Tensor, Tensor, Tensor]]) -> list[Tensor, Tensor, Tensor, Tensor]:
     conversion = collate.default_convert(batch)
     pad_sequence_no_sort = partial(pad_sequence, enforce_sorted=False)
     padded_batch = chain(*map(pad_sequence_no_sort, zip(*conversion)))

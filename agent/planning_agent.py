@@ -38,17 +38,17 @@ class PlanningAgent:
                                                     dtype=torch.int64)
 
     @torch.no_grad()
-    def __call__(self, observation: Tensor) -> Tensor:
-        if not (observation.max() <= 0.5 and observation.min() >= -0.5 and observation.shape[-3:] == (3, 64, 64)):
-            observation = preprocess_observation_(observation)
+    def __call__(self, observation: Tensor, device: Optional[torch.device] = torch.device("cpu")) -> Tensor:
+        assert observation.max() <= 0.5 and observation.min() >= -0.5 and observation.shape[-3:] == (3, 64, 64), \
+            "Input obs has not been preprocessed yet"
 
-        device = observation.device  # FIXME: does this work? or are obs always on CPU?
-        # FIXME: Necessary, or are parameters always sent to the current device for the entire model?
+        observation = observation.to(device)
         self.init_action = self.init_action.to(device)
         self.init_action_len = self.init_action_len.to(device)
         self.candidate_actions_lengths = self.candidate_actions_lengths.to(device)
 
-        latent_observation = self.observation_model(observation).unsqueeze_(dim=1)
+        observation = observation[None, None]
+        latent_observation = self.observation_model(observation)
         _, posterior_belief, _, next_recurrent_hidden_state = self.transition_model(None, self.init_action,
                                                                                     self.init_action_len, None,
                                                                                     latent_observation)

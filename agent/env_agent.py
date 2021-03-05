@@ -36,20 +36,24 @@ class Agent:
         self.obs = self.env.render(mode="rgb_array")
         if (self.obs == 255.0).all():
             self.obs = np.zeros_like(self.obs)
+        self.obs = preprocess_observation_(self.obs)
+        self.replay_buffer.add_step_data(self.obs, np.zeros(self.action_space.shape), 0.0)
         return self.obs
 
     @torch.no_grad()
-    def action(self, obs: torch.Tensor) -> torch.Tensor:
-        action_mean = self.planner(obs)
+    def action(self, obs: torch.Tensor, device: Optional[torch.device] = torch.device("cpu")) -> torch.Tensor:
+        action_mean = self.planner(obs, device)
         return Normal(action_mean, self.explore_noise).sample()
 
-    def step(self, action: Optional[Union[np.ndarray, torch.Tensor]] = None) -> tuple[np.ndarray, int, bool]:
+    def step(self, action: Optional[Union[np.ndarray, torch.Tensor]] = None,
+             device: Optional[torch.device] = torch.device("cpu")) -> tuple[np.ndarray, int, bool]:
         if action is None:
-            action = self.action(self.obs).numpy()
+            action = self.action(self.obs, device).cpu().numpy()
         elif isinstance(action, torch.Tensor):
             action = action.numpy()
         _, reward, done, _ = self.env.step(action)
         self.obs = self.env.render(mode="rgb_array")
+        self.obs = preprocess_observation_(self.obs)
         self.replay_buffer.add_step_data(self.obs, action, reward)
         if done:
             self.reset()
