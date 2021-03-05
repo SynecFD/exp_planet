@@ -41,14 +41,13 @@ class Agent:
         return self.obs
 
     @torch.no_grad()
-    def action(self, obs: torch.Tensor, device: Optional[torch.device] = torch.device("cpu")) -> torch.Tensor:
-        action_mean = self.planner(obs, device)
+    def action(self, obs: torch.Tensor) -> torch.Tensor:
+        action_mean = self.planner(obs)
         return Normal(action_mean, self.explore_noise).sample()
 
-    def step(self, action: Optional[Union[np.ndarray, torch.Tensor]] = None,
-             device: Optional[torch.device] = torch.device("cpu")) -> tuple[np.ndarray, int, bool]:
+    def step(self, action: Optional[Union[np.ndarray, torch.Tensor]] = None) -> tuple[np.ndarray, int, bool]:
         if action is None:
-            action = self.action(self.obs, device).cpu().numpy()
+            action = self.action(self.obs).cpu().numpy()
         elif isinstance(action, torch.Tensor):
             action = action.numpy()
         _, reward, done, _ = self.env.step(action)

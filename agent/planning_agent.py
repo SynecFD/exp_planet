@@ -20,11 +20,13 @@ class PlanningAgent:
                  num_opt_iterations: int = 10,
                  num_candidates: int = 1000,
                  num_top_candidates: int = 100,
+                 device: Optional[torch.device] = torch.device("cpu")
                  ) -> None:
         # Models
         self.observation_model = observation_model
         self.transition_model = transition_model
         self.reward_model = reward_model
+        self.device = device
 
         # Hyper-Parameters
         self.planning_horizon = planning_horizon
@@ -39,14 +41,14 @@ class PlanningAgent:
                                                     dtype=torch.int64)
 
     @torch.no_grad()
-    def __call__(self, observation: Tensor, device: Optional[torch.device] = torch.device("cpu")) -> Tensor:
+    def __call__(self, observation: Tensor) -> Tensor:
         assert observation.max() <= 0.5 and observation.min() >= -0.5 and observation.shape[-3:] == (3, 64, 64), \
             "Input obs has not been preprocessed yet"
 
-        observation = observation.to(device)
-        self.init_action = self.init_action.to(device)
-        self.init_action_len = self.init_action_len.to(device)
-        self.candidate_actions_lengths = self.candidate_actions_lengths.to(device)
+        observation = observation.to(self.device)
+        self.init_action = self.init_action.to(self.device)
+        self.init_action_len = self.init_action_len.to(self.device)
+        self.candidate_actions_lengths = self.candidate_actions_lengths.to(self.device)
 
         observation = observation[None, None]
         latent_observation = self.observation_model(observation)
@@ -56,8 +58,8 @@ class PlanningAgent:
         posterior_sample = posterior_belief.sample((self.num_candidates, self.planning_horizon)).squeeze_()
         next_recurrent_hidden_state = next_recurrent_hidden_state.repeat(1, self.num_candidates, 1)
 
-        action_belief = Normal(torch.zeros(self.planning_horizon, *self.action_space.shape, device=device),
-                               torch.ones(self.planning_horizon, *self.action_space.shape, device=device))
+        action_belief = Normal(torch.zeros(self.planning_horizon, *self.action_space.shape, device=self.device),
+                               torch.ones(self.planning_horizon, *self.action_space.shape, device=self.device))
         for _ in range(self.num_opt_iterations):
             candidate_actions = action_belief.sample((self.num_candidates,))
 
@@ -76,8 +78,6 @@ class PlanningAgent:
             top_candidate_actions = candidate_actions[top_reward_idx]
             mean = top_candidate_actions.mean(dim=0)
             std_dev = top_candidate_actions.std(dim=0, unbiased=False)
-            # DEBUG
-            # print(f"Refitting action distribution to device: {mean.device=} and {std_dev.device=}")
             action_belief = Normal(mean, std_dev)
 
         return mean[0]

@@ -84,7 +84,8 @@ class PlaNet(pl.LightningModule):
 
         # Planner
         self.planner = PlanningAgent(self.encoder, self.rssm, self.reward_model, self.env.action_space,
-                                     self.hor_len, self.opt_iter, self.num_candidates, self.top_candidates)
+                                     self.hor_len, self.opt_iter, self.num_candidates, self.top_candidates,
+                                     device=self.device)
 
         # Environment interaction
         self.replay_buffer = ExperienceReplay(self.replay_cap)
@@ -156,7 +157,7 @@ class PlaNet(pl.LightningModule):
     def training_epoch_end(self, training_step_outputs):
         # Data collection
         for _ in range(self.episode_max_len):
-            self.agent.step(device=self.device)
+            self.agent.step()
         self.agent.reset()
 
     def single_step_loss(self, prior: Normal,
