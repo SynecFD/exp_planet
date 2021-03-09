@@ -134,6 +134,10 @@ class PlaNet(pl.LightningModule):
                 ) -> tuple[Normal, Normal, torch.Tensor, torch.Tensor]:
         return self.rssm(cur_belief, actions, lengths, recurrent_state, latent_obs)
 
+    def on_train_epoch_start(self) -> None:
+        self.belief = None
+        self.last_recurrent_state = None
+
     def on_train_batch_start(self, batch: list[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int,
                              dataloader_idx: int) -> None:
         if self.belief is not None:
@@ -145,8 +149,8 @@ class PlaNet(pl.LightningModule):
                       *args, **kwargs) -> torch.Tensor:
         obs_batch, actions_batch, rewards_batch, length = batch
         # FIXME: Do we really not reuse last posterior-belief sample and recurrent state between batches?
-        self.belief = None
-        self.last_recurrent_state = None
+        # self.belief = None
+        # self.last_recurrent_state = None
 
         latent_obs = self.encoder(obs_batch)
         recurrent_step = self(self.belief, actions_batch, length, self.last_recurrent_state, latent_obs)
