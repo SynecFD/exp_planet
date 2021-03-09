@@ -21,7 +21,7 @@ class ActionRepeat(Wrapper):
             raise ValueError(f'Times parameter ({times}) should be greater than 1')
         self._times = times
 
-    def step(self, action):
+    def step(self, action) -> tuple[object, float, bool, dict]:
         total_reward = 0
 
         for _ in range(self._times):
@@ -32,5 +32,5 @@ class ActionRepeat(Wrapper):
         return state, total_reward, done, info
 
     @property
-    def times(self):
+    def times(self) -> int:
         return self._times
