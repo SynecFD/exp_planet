@@ -72,6 +72,32 @@ class ExperienceReplay:
         self.replay.extend(exp_rpl)
 
 
+class StubExperienceReplay(ExperienceReplay):
+    def __init__(self) -> None:
+        super().__init__(0)
+
+    def __len__(self) -> int:
+        return 0
+
+    def append(self, experience: Experience) -> None:
+        pass
+
+    def add_step_data(self, state: Tensor, action: np.ndarray, reward: float) -> None:
+        pass
+
+    def stack_episode(self) -> None:
+        pass
+
+    def get_sample(self, idx: int, seq_start: int, length: int) -> tuple[Tensor, np.ndarray, np.ndarray]:
+        pass
+
+    def persist(self, path: Path) -> None:
+        pass
+
+    def load(self, path: Path) -> None:
+        pass
+
+
 class ExperienceReplaySampler(RandomSampler):
 
     def __init__(self, buffer: Sequence, seq_length: int, allow_padding: bool = True, replacement: bool = False,
