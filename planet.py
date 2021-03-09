@@ -258,8 +258,8 @@ def main(args: Namespace) -> None:
     else:
         ckpt = latest_ckpt()
         if ckpt is not None:
-            model = PlaNet.load_from_checkpoint(ckpt, render=True, play=True)
-            model = model.cuda() if torch.cuda.is_available() else model
+            model = PlaNet.load_from_checkpoint(ckpt, epsi_noise=0.0, render=True, play=True)
+            model = model.cuda() if torch.cuda.is_available() else model.cpu()
             model.play()
         else:
             raise FileNotFoundError("No weights found for model, cannot play environment")
