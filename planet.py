@@ -173,6 +173,7 @@ class PlaNet(pl.LightningModule):
         reward_sum = self.replay_buffer.replay[-1].rewards.sum()
         self.log("Episode reward", reward_sum)
 
+    # @torch.no_grad()
     def single_step_loss(self, prior: Normal,
                          posterior: Normal,
                          obs: torch.Tensor,
