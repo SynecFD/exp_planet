@@ -26,6 +26,8 @@ class Agent:
         self.episode_path = episode_path
 
         self.env = env
+        if self.render:
+            self.env.render(mode="human")
 
         self.obs = None
         self.action_dim = sum(self.action_space.shape)
