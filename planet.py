@@ -5,6 +5,7 @@ from itertools import chain
 from math import ceil
 from os import cpu_count
 from pathlib import Path
+from typing import Optional
 
 import gym
 # noinspection PyUnresolvedReferences
@@ -18,7 +19,7 @@ from torch.utils.data import DataLoader
 
 from agent import Agent, PlanningAgent
 from model import RecurrentStateSpaceModel, VariationalEncoder, ObservationModelDecoder, RewardModel, ExperienceReplay, \
-    ExperienceReplaySampler, experience_replay_collate
+    ExperienceReplaySampler, experience_replay_collate, StubExperienceReplay
 from util import ActionRepeat
 from util.data_loader import ReplayBufferSet
 
@@ -46,6 +47,7 @@ class PlaNet(pl.LightningModule):
                  render: bool,
                  replay_size: int,
                  episode_max_len: int,
+                 play: bool,
                  **kwargs) -> None:
         super().__init__(**kwargs)
         self.lr = lr
@@ -63,7 +65,7 @@ class PlaNet(pl.LightningModule):
         self.seed_epi = seed_epi
         self.update_interval = update_interval
         self.epsi_noise = epsi_noise
-        self.render = render
+        self.render = play or render
         self.replay_size = replay_size
         self.episode_max_len = ceil(episode_max_len / action_rep)
 
@@ -87,10 +89,12 @@ class PlaNet(pl.LightningModule):
                                      self.hor_len, self.opt_iter, self.num_candidates, self.top_candidates)
 
         # Environment interaction
-        self.replay_buffer = ExperienceReplay(self.replay_cap)
+        self.replay_buffer = ExperienceReplay(self.replay_cap) if not play else StubExperienceReplay()
         self.agent = Agent(self.planner, self.epsi_noise, self.replay_buffer, self.save_path, self.env, self.render)
         self.agent.reset()
-        self.populate_memory(self.seed_epi, self.episode_max_len)
+        if not play:
+            self.populate_memory(self.seed_epi, self.episode_max_len)
+        self.save_hyperparameters()
 
     @staticmethod
     def _init_gym(env: str, action_repeat: int) -> tuple[gym.Env, int, int]:
@@ -112,6 +116,12 @@ class PlaNet(pl.LightningModule):
                 self.agent.reset()
             # FIXME: DEBUG
             self.replay_buffer.persist(self.save_path)
+
+    def play(self) -> None:
+        while True:
+            _, _, done = self.agent.step(device=self.device)
+            if done:
+                self.agent.reset()
 
     def __dataloader(self) -> DataLoader:
         """Initialize the Replay Buffer dataset used for retrieving experiences"""
@@ -230,14 +240,29 @@ class PlaNet(pl.LightningModule):
 
         parser.add_argument("--render", type=bool, default=False, help="display the environment")
         parser.add_argument("--replay_size", type=int, default=1000, help="capacity of the replay buffer")
+        parser.add_argument("--play", type=bool, default=False, help="Play environment with latest agent's weights")
 
         return parser
 
 
+def latest_ckpt() -> Optional[Path]:
+    ckpts = sorted((Path.cwd() / "lightning_logs").glob("version_*/checkpoints/*.ckpt"))
+    return ckpts[-1] if ckpts else None
+
+
 def main(args: Namespace) -> None:
-    model = PlaNet(**vars(args))
-    trainer = pl.Trainer(gpus=1)
-    trainer.fit(model)
+    if not args.play:
+        model = PlaNet(**vars(args))
+        trainer = pl.Trainer(gpus=1)
+        trainer.fit(model)
+    else:
+        ckpt = latest_ckpt()
+        if ckpt is not None:
+            model = PlaNet.load_from_checkpoint(ckpt, render=True, play=True)
+            model = model.cuda() if torch.cuda.is_available() else model
+            model.play()
+        else:
+            raise FileNotFoundError("No weights found for model, cannot play environment")
 
 
 if __name__ == '__main__':
