@@ -156,14 +156,18 @@ class PlaNet(pl.LightningModule):
         expected_reward = self.reward_model(self.belief, self.recurrent_states)
         reconstructed_obs = self.decoder(self.belief, self.recurrent_states)
 
-        return self.single_step_loss(prior_belief, posterior_belief, obs_batch, reconstructed_obs, rewards_batch,
+        loss = self.single_step_loss(prior_belief, posterior_belief, obs_batch, reconstructed_obs, rewards_batch,
                                      expected_reward, length, self.free_nats)
+        self.log("loss", loss)
+        return loss
 
     def training_epoch_end(self, training_step_outputs):
         # Data collection
         for _ in range(self.episode_max_len):
             self.agent.step(device=self.device)
         self.agent.reset()
+        reward_sum = self.replay_buffer.replay[-1].rewards.sum()
+        self.log("Episode reward", reward_sum)
 
     def single_step_loss(self, prior: Normal,
                          posterior: Normal,
