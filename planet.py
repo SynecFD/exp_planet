@@ -5,7 +5,7 @@ from itertools import chain
 from math import ceil
 from os import cpu_count
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import gym
 import pytorch_lightning as pl
@@ -243,8 +243,13 @@ class PlaNet(pl.LightningModule):
 
 
 def latest_ckpt() -> Optional[Path]:
-    ckpts = sorted((Path.cwd() / "lightning_logs").glob("version_*/checkpoints/*.ckpt"))
+    ckpts = sorted((Path.cwd() / "lightning_logs").glob("version_*/checkpoints/*.ckpt"), key=natural_keys)
     return ckpts[-1] if ckpts else None
+
+
+def natural_keys(key: Path) -> list[Union[str, int]]:
+    from re import split
+    return [int(part) if part.isdigit() else part for part in split(r"(\d+)", str(key))]
 
 
 def main(args: Namespace) -> None:
