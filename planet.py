@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import Optional
 
 import gym
-# noinspection PyUnresolvedReferences
-import pybullet_envs
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
@@ -20,7 +18,7 @@ from torch.utils.data import DataLoader
 from agent import Agent, PlanningAgent
 from model import RecurrentStateSpaceModel, VariationalEncoder, ObservationModelDecoder, RewardModel, ExperienceReplay, \
     ExperienceReplaySampler, experience_replay_collate, StubExperienceReplay
-from util import ActionRepeat
+from util import ActionRepeat, ResizeRender
 from util.data_loader import ReplayBufferSet
 
 
@@ -99,9 +97,8 @@ class PlaNet(pl.LightningModule):
     @staticmethod
     def _init_gym(env: str, action_repeat: int) -> tuple[gym.Env, int, int]:
         env = gym.make(env)
-        env.env._render_width = 64
-        env.env._render_height = 64
-        return ActionRepeat(env, action_repeat), env.env._render_height, env.env._render_width
+        env = ResizeRender(env, slice(80, None, 5), slice(140, 460, 5))
+        return ActionRepeat(env, action_repeat), 64, 64
 
     def populate_memory(self, episodes: int = 5, length: int = 200) -> None:
         if self.save_path.exists():
@@ -214,7 +211,7 @@ class PlaNet(pl.LightningModule):
     @staticmethod
     def add_model_specific_args(parent_parser):  # pragma: no-cover
         parser = argparse.ArgumentParser(parents=[parent_parser])
-        parser.add_argument("--env", type=str, default="HalfCheetahBulletEnv-v0", help="gym environment tag")
+        parser.add_argument("--env", type=str, default="CartPole-v1", help="gym environment tag")
         parser.add_argument("--lr", type=float, default=1e-3, help="learning rate for Adam")
         parser.add_argument("--epsi", type=float, default=1e-4, help="epsilon for Adam")
         parser.add_argument("--save-path", type=Path, default=Path.cwd() / "data" / "episode",
@@ -235,7 +232,7 @@ class PlaNet(pl.LightningModule):
         parser.add_argument("-C", "--update-interval", type=int, default=100,
                             help="number of update steps before episode collection")
         parser.add_argument("--epsi-noise", type=float, default=0.3, help="std dev of exploration noise")
-        parser.add_argument("--action-rep", type=int, default=4, help="Action repeats for the environment")
+        parser.add_argument("--action-rep", type=int, default=8, help="Action repeats for the environment")
         parser.add_argument("--episode-max-len", type=int, default=1000, help="Max episode length")
 
         parser.add_argument("--render", type=bool, default=False, help="display the environment")
