@@ -250,7 +250,7 @@ def latest_ckpt() -> Optional[Path]:
 def main(args: Namespace) -> None:
     if not args.play:
         model = PlaNet(**vars(args))
-        trainer = pl.Trainer(gpus=1)
+        trainer = pl.Trainer(gradient_clip_val=1000, gpus=1)
         trainer.fit(model)
     else:
         ckpt = latest_ckpt()
