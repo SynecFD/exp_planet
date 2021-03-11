@@ -110,7 +110,7 @@ class PlaNet(pl.LightningModule):
             for _ in range(episodes):
                 for _ in range(length):
                     action = self.env.action_space.sample()
-                    _, _, done = self.agent.step(action)
+                    _, _, done, _ = self.agent.step(action)
                     if done:
                         break
                 self.agent.reset()
@@ -119,7 +119,7 @@ class PlaNet(pl.LightningModule):
 
     def play(self) -> None:
         while True:
-            _, _, done = self.agent.step(device=self.device)
+            _, _, done, _ = self.agent.step(device=self.device)
             if done:
                 self.agent.reset()
 

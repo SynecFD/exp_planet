@@ -29,7 +29,7 @@ class Agent:
         if self.render:
             self.env.render(mode="human")
 
-        self.obs = None
+        self.current_obs = None
         self.action_dim = sum(self.action_space.shape)
 
     def reset(self) -> torch.Tensor:
@@ -47,9 +47,9 @@ class Agent:
         return Normal(action_mean, self.explore_noise).sample()
 
     def step(self, action: Optional[Union[np.ndarray, torch.Tensor]] = None,
-             device: Optional[torch.device] = torch.device("cpu")) -> tuple[np.ndarray, int, bool]:
+             device: Optional[torch.device] = torch.device("cpu")) -> tuple[torch.Tensor, int, bool, torch.Tensor]:
         if action is None:
-            action = self.action(self.obs, device).cpu().numpy()
+            action = self.action(self.current_obs, device).cpu().numpy()
         elif isinstance(action, torch.Tensor):
             action = action.numpy()
         _, reward, done, _ = self.env.step(action)
@@ -59,7 +59,7 @@ class Agent:
         self.current_obs = next_obs
         if done:
             self.reset()
-        return self.obs, reward, done
+        return self.current_obs, reward, done, next_obs
 
     @property
     def action_space(self):
