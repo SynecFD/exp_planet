@@ -29,18 +29,17 @@ class Agent:
         if self.render:
             self.env.render(mode="human")
 
-        self.obs = None
+        self.current_obs = None
         self.action_dim = sum(self.action_space.shape)
 
     def reset(self) -> torch.Tensor:
         self.replay_buffer.stack_episode()
         self.env.reset()
-        self.obs = self.env.render(mode="rgb_array")
-        if (self.obs == 255.0).all():
-            self.obs = np.zeros_like(self.obs)
-        self.obs = preprocess_observation_(self.obs)
-        self.replay_buffer.add_step_data(self.obs, np.zeros(self.action_space.shape), 0.0)
-        return self.obs
+        self.current_obs = self.env.render(mode="rgb_array")
+        if (self.current_obs == 255.0).all():
+            self.current_obs = np.zeros_like(self.current_obs)
+        self.current_obs = preprocess_observation_(self.current_obs)
+        return self.current_obs
 
     @torch.no_grad()
     def action(self, obs: torch.Tensor, device: Optional[torch.device] = torch.device("cpu")) -> torch.Tensor:
@@ -48,18 +47,20 @@ class Agent:
         return Normal(action_mean, self.explore_noise).sample()
 
     def step(self, action: Optional[Union[np.ndarray, torch.Tensor]] = None,
-             device: Optional[torch.device] = torch.device("cpu")) -> tuple[np.ndarray, int, bool]:
+             device: Optional[torch.device] = torch.device("cpu")) -> tuple[torch.Tensor, int, bool, torch.Tensor]:
         if action is None:
-            action = self.action(self.obs, device).cpu().numpy()
+            action = self.action(self.current_obs, device).cpu().numpy()
         elif isinstance(action, torch.Tensor):
             action = action.numpy()
         _, reward, done, _ = self.env.step(action)
-        self.obs = self.env.render(mode="rgb_array")
-        self.obs = preprocess_observation_(self.obs)
-        self.replay_buffer.add_step_data(self.obs, action, reward)
+        next_obs = self.env.render(mode="rgb_array")
+        next_obs = preprocess_observation_(next_obs)
+        self.replay_buffer.add_step_data(self.current_obs, action, reward)
+        temp_curr_obs = self.current_obs
+        self.current_obs = next_obs
         if done:
             self.reset()
-        return self.obs, reward, done
+        return temp_curr_obs, reward, done, next_obs
 
     @property
     def action_space(self):
