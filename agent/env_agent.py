@@ -56,10 +56,11 @@ class Agent:
         next_obs = self.env.render(mode="rgb_array")
         next_obs = preprocess_observation_(next_obs)
         self.replay_buffer.add_step_data(self.current_obs, action, reward)
+        temp_curr_obs = self.current_obs
         self.current_obs = next_obs
         if done:
             self.reset()
-        return self.current_obs, reward, done, next_obs
+        return temp_curr_obs, reward, done, next_obs
 
     @property
     def action_space(self):
