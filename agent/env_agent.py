@@ -39,7 +39,6 @@ class Agent:
         if (self.obs == 255.0).all():
             self.obs = np.zeros_like(self.obs)
         self.obs = preprocess_observation_(self.obs)
-        self.replay_buffer.add_step_data(self.obs, np.zeros(self.action_space.shape), 0.0)
         return self.obs
 
     @torch.no_grad()
@@ -54,9 +53,10 @@ class Agent:
         elif isinstance(action, torch.Tensor):
             action = action.numpy()
         _, reward, done, _ = self.env.step(action)
-        self.obs = self.env.render(mode="rgb_array")
-        self.obs = preprocess_observation_(self.obs)
+        next_obs = self.env.render(mode="rgb_array")
+        next_obs = preprocess_observation_(next_obs)
         self.replay_buffer.add_step_data(self.obs, action, reward)
+        self.obs = next_obs
         if done:
             self.reset()
         return self.obs, reward, done
