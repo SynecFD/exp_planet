@@ -99,7 +99,7 @@ class PlaNet(pl.LightningModule):
         return envs.init_env(env, action_repeat)
 
     def populate_memory(self, episodes: int = 5, length: int = 200) -> None:
-        if self.save_path.exists():
+        if self.save_path.with_suffix(".npz").exists() and self.save_path.with_suffix(".pt").exists():
             self.replay_buffer.load(self.save_path)
         else:
             for _ in range(episodes):

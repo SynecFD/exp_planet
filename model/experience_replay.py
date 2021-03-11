@@ -57,14 +57,13 @@ class ExperienceReplay:
         return states, actions, rewards
 
     def persist(self, path: Path) -> None:
-
         path.parent.mkdir(exist_ok=True)
         episodes, actions, rewards = list(zip(*self.replay))
         np.savez_compressed(path.with_suffix(".npz"), actions=actions, rewards=rewards)
         torch.save(episodes, path.with_suffix(".pt"))
 
     def load(self, path: Path) -> None:
-        if not path.exists():
+        if not path.with_suffix(".npz").exists() or not path.with_suffix(".pt").exists():
             raise FileNotFoundError("Invalid path to persisted ExperienceReplay")
         dict = np.load(path.with_suffix(".npz"), allow_pickle=False, fix_imports=False)
         states = torch.load(path.with_suffix(".pt")), dict["actions"], dict["rewards"]
