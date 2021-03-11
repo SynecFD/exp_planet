@@ -35,11 +35,11 @@ class Agent:
     def reset(self) -> torch.Tensor:
         self.replay_buffer.stack_episode()
         self.env.reset()
-        self.obs = self.env.render(mode="rgb_array")
-        if (self.obs == 255.0).all():
-            self.obs = np.zeros_like(self.obs)
-        self.obs = preprocess_observation_(self.obs)
-        return self.obs
+        self.current_obs = self.env.render(mode="rgb_array")
+        if (self.current_obs == 255.0).all():
+            self.current_obs = np.zeros_like(self.current_obs)
+        self.current_obs = preprocess_observation_(self.current_obs)
+        return self.current_obs
 
     @torch.no_grad()
     def action(self, obs: torch.Tensor, device: Optional[torch.device] = torch.device("cpu")) -> torch.Tensor:
@@ -55,8 +55,8 @@ class Agent:
         _, reward, done, _ = self.env.step(action)
         next_obs = self.env.render(mode="rgb_array")
         next_obs = preprocess_observation_(next_obs)
-        self.replay_buffer.add_step_data(self.obs, action, reward)
-        self.obs = next_obs
+        self.replay_buffer.add_step_data(self.current_obs, action, reward)
+        self.current_obs = next_obs
         if done:
             self.reset()
         return self.obs, reward, done
