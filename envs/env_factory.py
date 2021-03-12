@@ -16,7 +16,7 @@ def init_env(env: str, action_repeat: Optional[int] = None) -> tuple[gym.Env, in
         func, default_action_repeat = factory
         # Uses default value per env if None or 0, else the given value
         repeat_times = action_repeat or default_action_repeat
-        return func(repeat_times)
+        return *func(repeat_times), repeat_times
     else:
         raise NotImplementedError(f"No factory method for {env}")
 
@@ -32,7 +32,7 @@ def _half_cheetah_bullet_env(action_repeat: int) -> tuple[gym.Env, int, int]:
 
 def _pendulum_env(action_repeat: int) -> tuple[gym.Env, int, int]:
     env = gym.make(PENDULUM)
-    env = GymClassicControl(env, action_repeat, slice(90, 410, 5), slice(90, 410, 5))
+    env = GymClassicControl(env, action_repeat, 90, 90, 320, 320, (64, 64))
     return env, 64, 64
 
 

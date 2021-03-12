@@ -9,7 +9,6 @@ from torch.distributions import Normal
 from agent import PlanningAgent
 from envs import PyBulletGym
 from model import ExperienceReplay
-from util import preprocess_observation_
 
 
 class Agent:
@@ -37,10 +36,6 @@ class Agent:
     def reset(self) -> torch.Tensor:
         self.replay_buffer.stack_episode()
         self.current_obs = self.env.reset()
-        if (self.current_obs == 255.0).all():
-            self.current_obs = np.zeros_like(self.current_obs)
-        else:
-            self.current_obs = preprocess_observation_(self.current_obs)
         return self.current_obs
 
     @torch.no_grad()
@@ -55,7 +50,6 @@ class Agent:
         elif isinstance(action, torch.Tensor):
             action = action.numpy()
         next_obs, reward, done, _ = self.env.step(action)
-        next_obs = preprocess_observation_(next_obs)
         self.replay_buffer.add_step_data(self.current_obs, action, reward)
         current_obs = self.current_obs
         self.current_obs = next_obs
