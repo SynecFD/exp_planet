@@ -41,7 +41,10 @@ class Agent:
     @torch.no_grad()
     def action(self, obs: torch.Tensor, device: Optional[torch.device] = torch.device("cpu")) -> torch.Tensor:
         action_mean = self.planner(obs, device)
-        return Normal(action_mean, self.explore_noise).sample()
+        if self.explore_noise > 0:
+            return Normal(action_mean, self.explore_noise).sample()
+        else:
+            return action_mean
 
     def step(self, action: Optional[Union[np.ndarray, torch.Tensor]] = None,
              device: Optional[torch.device] = torch.device("cpu")) -> tuple[torch.Tensor, int, bool, torch.Tensor]:
