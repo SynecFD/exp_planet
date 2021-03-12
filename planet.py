@@ -47,7 +47,7 @@ class PlaNet(pl.LightningModule):
                  episode_max_len: int,
                  play: bool,
                  **kwargs) -> None:
-        super().__init__(**kwargs)
+        super().__init__()
         self.lr = lr
         self.epsi = epsi
         self.save_path = save_path
@@ -207,9 +207,10 @@ class PlaNet(pl.LightningModule):
                                     self.rssm.parameters(), self.reward_model.parameters()])
 
     @staticmethod
-    def add_model_specific_args(parent_parser):  # pragma: no-cover
+    def add_model_specific_args(parent_parser):
         parser = argparse.ArgumentParser(parents=[parent_parser])
-        parser.add_argument("--env", type=str, default="CartPole-v1", help="gym environment tag")
+        parser.add_argument("--env", type=str, default="InvertedPendulumSwingupBulletEnv-v0",
+                            help="gym environment tag")
         parser.add_argument("--lr", type=float, default=1e-3, help="learning rate for Adam")
         parser.add_argument("--epsi", type=float, default=1e-4, help="epsilon for Adam")
         parser.add_argument("--save-path", type=Path, default=Path.cwd() / "data" / "episode",
@@ -219,7 +220,6 @@ class PlaNet(pl.LightningModule):
         parser.add_argument("-L", "--seq-len", type=int, default=50, help="length of sequence chunks")
         parser.add_argument("--grad-clip", type=int, default=1000, help="gradient clipping norm")
         parser.add_argument("--free-nats", type=int, default=3, help="clipping the divergence loss below this value")
-
         parser.add_argument("-H", "--hor-len", type=int, default=12, help="horizon length for CEM")
         parser.add_argument("-I", "--opt-iter", type=int, default=10, help="optimization iterations for CEM")
         parser.add_argument("-J", "--num-candidates", type=int, default=1000,
@@ -232,11 +232,8 @@ class PlaNet(pl.LightningModule):
         parser.add_argument("--epsi-noise", type=float, default=0.3, help="std dev of exploration noise")
         parser.add_argument("--action-rep", type=int, help="Action repeats for the environment")
         parser.add_argument("--episode-max-len", type=int, default=1000, help="Max episode length")
-
-        parser.add_argument("--render", type=bool, default=False, help="display the environment")
+        parser.add_argument("--render", action='store_true', help="display the environment")
         parser.add_argument("--replay_size", type=int, default=1000, help="capacity of the replay buffer")
-        parser.add_argument("--play", type=bool, default=False, help="Play environment with latest agent's weights")
-
         return parser
 
 
@@ -250,10 +247,10 @@ def natural_keys(key: Path) -> list[Union[str, int]]:
     return [int(part) if part.isdigit() else part for part in split(r"(\d+)", str(key))]
 
 
-def main(args: Namespace) -> None:
-    if not args.play:
-        model = PlaNet(**vars(args))
-        trainer = pl.Trainer(gradient_clip_val=1000, gpus=1)
+def main(hparams: Namespace) -> None:
+    if not hparams.play:
+        model = PlaNet(**vars(hparams))
+        trainer = pl.Trainer.from_argparse_args(hparams)
         trainer.fit(model)
     else:
         ckpt = latest_ckpt()
@@ -268,6 +265,9 @@ def main(args: Namespace) -> None:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
     parser = PlaNet.add_model_specific_args(parser)
+    parser.add_argument("--gradient-clip-val", type=int, default=1000, help="Gradient clipping norm")
+    parser.add_argument("--gpus", type=int, default=1, help="Number of GPUs to use")
+    parser.add_argument("--play", action='store_true', help="Play environment with latest agent's weights")
     args = parser.parse_args()
 
     main(args)
