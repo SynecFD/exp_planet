@@ -7,6 +7,7 @@ import torch
 from torch.distributions import Normal
 
 from agent import PlanningAgent
+from envs import PyBulletGym
 from model import ExperienceReplay
 from util import preprocess_observation_
 
@@ -26,7 +27,8 @@ class Agent:
         self.episode_path = episode_path
 
         self.env = env
-        if self.render:
+        # Gym Classic Control tasks will always render.
+        if self.render and isinstance(self.env, PyBulletGym):
             self.env.render(mode="human")
 
         self.current_obs = None
@@ -34,11 +36,11 @@ class Agent:
 
     def reset(self) -> torch.Tensor:
         self.replay_buffer.stack_episode()
-        self.env.reset()
-        self.current_obs = self.env.render(mode="rgb_array")
+        self.current_obs = self.env.reset()
         if (self.current_obs == 255.0).all():
             self.current_obs = np.zeros_like(self.current_obs)
-        self.current_obs = preprocess_observation_(self.current_obs)
+        else:
+            self.current_obs = preprocess_observation_(self.current_obs)
         return self.current_obs
 
     @torch.no_grad()
@@ -52,15 +54,14 @@ class Agent:
             action = self.action(self.current_obs, device).cpu().numpy()
         elif isinstance(action, torch.Tensor):
             action = action.numpy()
-        _, reward, done, _ = self.env.step(action)
-        next_obs = self.env.render(mode="rgb_array")
+        next_obs, reward, done, _ = self.env.step(action)
         next_obs = preprocess_observation_(next_obs)
         self.replay_buffer.add_step_data(self.current_obs, action, reward)
-        temp_curr_obs = self.current_obs
+        current_obs = self.current_obs
         self.current_obs = next_obs
         if done:
             self.reset()
-        return temp_curr_obs, reward, done, next_obs
+        return current_obs, reward, done, next_obs
 
     @property
     def action_space(self):
