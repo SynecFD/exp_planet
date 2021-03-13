@@ -1,7 +1,5 @@
 import argparse
 from argparse import Namespace
-from collections import Iterable
-from itertools import chain
 from math import ceil
 from os import cpu_count
 from pathlib import Path
@@ -12,7 +10,6 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from torch.distributions import Normal, kl_divergence
-from torch.nn import Parameter
 from torch.utils.data import DataLoader
 
 import envs
@@ -202,11 +199,7 @@ class PlaNet(pl.LightningModule):
         return kl_loss + obs_loss + reward_loss
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        return torch.optim.Adam(self._get_params(), lr=self.lr, eps=self.epsi)
-
-    def _get_params(self) -> Iterable[Parameter]:
-        return chain.from_iterable([self.encoder.parameters(), self.decoder.parameters(),
-                                    self.rssm.parameters(), self.reward_model.parameters()])
+        return torch.optim.Adam(self.parameters(), lr=self.lr, eps=self.epsi)
 
     @staticmethod
     def add_model_specific_args(parent_parser):
