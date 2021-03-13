@@ -167,7 +167,7 @@ class PlaNet(pl.LightningModule):
 
         loss = self.single_step_loss(prior_belief, posterior_belief, obs_batch, reconstructed_obs, rewards_batch,
                                      expected_reward, length, self.free_nats)
-        self.log("loss", loss)
+        self.log("Combined loss", loss)
         return loss
 
     def training_epoch_end(self, training_step_outputs):
@@ -196,7 +196,9 @@ class PlaNet(pl.LightningModule):
         kl_loss = kl_divergence(prior, posterior).sum(dim=2).masked_select(mask).clamp(min=free_nats).mean()
         obs_loss = F.mse_loss(decode_obs, obs, reduction="none").sum(dim=(2, 3, 4)).masked_select(mask).mean()
         reward_loss = F.mse_loss(expected_reward, reward, reduction="none").masked_select(mask).mean()
-
+        self.log("KL-Loss", kl_loss)
+        self.log("Obs-Loss", obs_loss)
+        self.log("Reward-Loss", reward_loss)
         return kl_loss + obs_loss + reward_loss
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
